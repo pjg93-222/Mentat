@@ -113,3 +113,8 @@ Changed:
   ops/desktop/client/updater.cjs
   ops/desktop/packaging/native-build.yml.template
 Secret grep and gitleaks on the changed paths: clean. No exclusions.
+
+== ADDENDUM 5 2026-10-16: desktop tooling at Melange 99431fc3c (integration/melange-20261016): version 1.0.3
+Same roots and filter as Addenda 3 and 4. Source tree 166 files; published 166; added 0, changed 2, unchanged 164. Every published blob under ops/desktop equals the 99431fc3c blob (166/166).
+Changed: ops/desktop/client/package.json and ops/desktop/client/package-lock.json (version 1.0.0 -> 1.0.3, metadata only). Nothing else differs from Addendum 4 (ad824960d). gitleaks on the changed files: clean. No exclusions.
+Line endings: blobs are published byte-for-byte (autocrlf=false, no conversion). 143 of 163 text files are LF-only; 20 text files are CRLF inside the source blobs themselves (listed in SOURCE_PROVENANCE.json addendum5); the 3 .ico files are binary. A build from a CRLF working-tree checkout normalises to the LF blobs only for the LF-only files; the 20 CRLF files are CRLF in the blobs too.
