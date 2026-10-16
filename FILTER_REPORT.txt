@@ -94,3 +94,10 @@ KEPT-EXCLUDED (private/runtime/licensed data)
 
 Counts: INCLUDED-NOW 23 (20 mentat + 3 desktop); KEPT-EXCLUDED 22 (all mentat).
 Note: tests that read memo_redisclosure_cases.json or mentat-pocket.html, and code reading the excluded inputs/, need those files supplied separately or replaced by synthetic equivalents.
+
+== ADDENDUM 3 2026-10-16: desktop tooling refreshed to Melange 5717f5b8d (release/desktop-fixes, child of main 3cb213fd6)
+Roots: ops/desktop/client, ops/desktop/packaging, ops/desktop/GITHUB_RELEASES.md, ops/desktop/server (new). Same filter rules as before (mode, build/dist/node_modules paths, extension allowlist, 5 MB cap), plus the four extension-excluded tracked files kept as explicit addendum files.
+Source tree: 166 files; published tree under ops/desktop: 166 (was 129). Added 37 (all under ops/desktop/server/), changed 2, unchanged 127. Every published blob under ops/desktop equals the 5717f5b8d blob (166/166).
+Changed: ops/desktop/packaging/runtime-manifest.json (adds mentat/app/template.csv and mentat/tools/pocket/manifest.webmanifest), ops/desktop/packaging/test_staging.py (new test). Nothing else under client/ or packaging/ differs between 75aa077fa and 5717f5b8d.
+Added: ops/desktop/server/ (desktop_admin.py and the access/dashboard/notification modules, PowerShell launchers, admin UI, tests, requirements.txt, README/DEPLOYMENT docs, .gitignore). Inspected: code and docs only; the publisher's private state (signing keys, TLS key, enrollment/audit databases) is created by 'init' under %USERPROFILE%\Documents\MelangeDesktopAdmin, outside the repository, and none is tracked. Secret grep and gitleaks on the changed paths: clean.
+Exclusions: none from the source tree beyond those already handled; the 4 extension-excluded files (client/.gitignore, packaging/.gitignore, packaging/native-build.yml.template, server/.gitignore) are included as explicit addendum files.
