@@ -6,7 +6,7 @@ This repository holds the filtered application source for Mentat, published with
 Source commits:
 
 - Mentat `419ad729ffccf3cf08c6b6b006d2a84bfb0a8bc6` from local branch `codex/mentat-crypto` (path `mentat/`)
-- Desktop tooling from Melange `5717f5b8d504e302183a4d7aeed57f6aa5504a00` on branch `release/desktop-fixes` (based on `main` `3cb213fd64f9f45a001b59c1fb92305ebb3b73a0`) (`ops/desktop/client/`, `ops/desktop/packaging/`, `ops/desktop/server/`, `ops/desktop/GITHUB_RELEASES.md`)
+- Desktop tooling from Melange `ad824960d8569fb5c90e28b91f8558c9443f8792` on branch `release/desktop-fixes` (based on `main` `3cb213fd64f9f45a001b59c1fb92305ebb3b73a0`) (`ops/desktop/client/`, `ops/desktop/packaging/`, `ops/desktop/server/`, `ops/desktop/GITHUB_RELEASES.md`)
 
 See `SOURCE_PROVENANCE.json` and `ops/desktop/GITHUB_RELEASES.md`.
 

@@ -101,3 +101,15 @@ Source tree: 166 files; published tree under ops/desktop: 166 (was 129). Added 3
 Changed: ops/desktop/packaging/runtime-manifest.json (adds mentat/app/template.csv and mentat/tools/pocket/manifest.webmanifest), ops/desktop/packaging/test_staging.py (new test). Nothing else under client/ or packaging/ differs between 75aa077fa and 5717f5b8d.
 Added: ops/desktop/server/ (desktop_admin.py and the access/dashboard/notification modules, PowerShell launchers, admin UI, tests, requirements.txt, README/DEPLOYMENT docs, .gitignore). Inspected: code and docs only; the publisher's private state (signing keys, TLS key, enrollment/audit databases) is created by 'init' under %USERPROFILE%\Documents\MelangeDesktopAdmin, outside the repository, and none is tracked. Secret grep and gitleaks on the changed paths: clean.
 Exclusions: none from the source tree beyond those already handled; the 4 extension-excluded files (client/.gitignore, packaging/.gitignore, packaging/native-build.yml.template, server/.gitignore) are included as explicit addendum files.
+
+== ADDENDUM 4 2026-10-16: desktop tooling refreshed to Melange ad824960d (release/desktop-fixes: 3cb213fd6 -> 5717f5b8d -> 0e6c3c328 isolated profile -> ad824960d Terrier pyarrow pin)
+Same roots and filter as Addendum 3. Source tree 166 files; published 166; added 0, changed 7, unchanged 159. Every published blob under ops/desktop equals the ad824960d blob (166/166).
+Changed:
+  ops/desktop/client/main.cjs
+  ops/desktop/client/profile.cjs
+  ops/desktop/client/runtime.cjs
+  ops/desktop/client/tests/lifecycle.test.cjs
+  ops/desktop/client/tests/profile.test.cjs
+  ops/desktop/client/updater.cjs
+  ops/desktop/packaging/native-build.yml.template
+Secret grep and gitleaks on the changed paths: clean. No exclusions.

@@ -34,3 +34,15 @@ The published tree excludes private and runtime data on purpose; see `FILTER_REP
 - Licensed IBISWorld figures and the built `mentat/tools/pocket/mentat-pocket.html` data snapshot.
 
 Supply these locally from the staff data store when running the full pipeline or the tests that read them. Keep them out of commits: the tracked `.gitignore` files help, but check `git status` before every commit.
+
+## Isolated acceptance testing
+
+Test a packaged build from the unpacked output, never by running the installer. Launch the unpacked executable with an isolated profile:
+
+```
+<unpacked build>\<App>.exe --melange-isolated-profile=C:\absolute\path\to\scratch-profile
+```
+
+The directory must be absolute, local and separate from production application state (`Documents\MelangeApplicationState`, `Documents\MelangeApplications`, legacy `MelangeApps` and the install folder); the app refuses an overlapping, relative or repeated switch. In this mode login startup, OS registration and native update installation are disabled, and the window title carries "[isolated test profile]". Trust, enrollment and signature checks are unchanged. The mode writes a log at `<profile>\logs\isolated-profile.log`.
+
+Cleanup: delete the scratch profile directory when finished. Device credentials are not stored in the profile. Enrolling or authenticating during a test writes Windows Credential Manager entries whose target names start with `MelangeSystems.Desktop.` (for example `MelangeSystems.Desktop.Access.Token/...`). Remove the ones created by the test (Control Panel, Credential Manager, Windows Credentials, or `cmdkey /list` then `cmdkey /delete:<target>`) so they do not carry into later runs or a real install.
