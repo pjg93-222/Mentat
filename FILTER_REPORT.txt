@@ -1,0 +1,39 @@
+== Mentat tree: specs=['mentat'] source=C:/Users/pgoff/Mentat commit=419ad729ffccf3cf08c6b6b006d2a84bfb0a8bc6
+included: 1401
+excluded: 42
+  [excluded path] 17
+     mentat/inputs/Company Name.xlsx
+     mentat/inputs/Credit Union Cross Industry Spending.xlsx
+     mentat/inputs/Leadership PACs to candidates, 2021-2022.csv
+     mentat/inputs/Leadership PACs to candidates, 2023-2024.csv
+     mentat/inputs/Spending Report template.xlsx
+     mentat/inputs/Super PAC, 527, Carey, 501c.xlsx
+     mentat/inputs/Trade Associations.txt
+     mentat/inputs/company_home_states.csv
+  [extension not allowed] 25
+     mentat/Install MENTAT.cmd
+     mentat/R-packages.lock.tsv
+     mentat/app/.gitignore
+     mentat/app/desktop/.gitignore
+     mentat/app/geo/.gitignore
+     mentat/app/requirements-hosted.in
+     mentat/app/template.csv
+     mentat/app/templates/index.html.j2
+files > 1 MB included: 9
+     1.79 MB  mentat/app/geo/v2/wgs84/z0/county.1.geojson
+     1.72 MB  mentat/app/geo/v2/wgs84/hex/hex25.1.geojson
+     1.70 MB  mentat/app/geo/tract_cd118.json
+     1.69 MB  mentat/app/geo/tract_cd119.json
+     1.37 MB  mentat/app/geo/v2/albers/national/county.json
+     1.31 MB  mentat/app/geo/v2/albers/hex/hex25.json
+     1.30 MB  mentat/app/geo/v2/albers/hex/AK/hex10.json
+     1.19 MB  mentat/app/geo/zcta_points.json
+     1.10 MB  mentat/app/geo/v2/albers/national/CA/tract.json
+== Melange desktop tooling: specs=['desktop'] source=C:/Users/pgoff/OneDrive/Desktop/Melange Systems commit=75aa077fa53581fe2379fb90572cffc0d4fc7db3
+included: 126
+excluded: 3
+  [extension not allowed] 3
+     ops/desktop/client/.gitignore
+     ops/desktop/packaging/.gitignore
+     ops/desktop/packaging/native-build.yml.template
+files > 1 MB included: 0
