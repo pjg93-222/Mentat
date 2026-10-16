@@ -37,3 +37,60 @@ excluded: 3
      ops/desktop/packaging/.gitignore
      ops/desktop/packaging/native-build.yml.template
 files > 1 MB included: 0
+
+== ADDENDUM 2026-10-16: extension-filter exclusions reviewed and re-classified
+The extension allowlist in ops/release_lib/export.py dropped app-owned source/build/test files. Every exclusion above was classified below.
+Blobs added are byte-identical to the frozen commits (git hash-object == source blob id, 23/23). Lists above show only the first 8 names per reason; this table is complete.
+Mentat tree (419ad729ffcc): 42 excluded -> 20 INCLUDED-NOW, 22 KEPT-EXCLUDED. Melange desktop tooling (75aa077fa535): 3 excluded -> 3 INCLUDED-NOW, 0 KEPT-EXCLUDED.
+
+INCLUDED-NOW (source/build/test input; reviewed, no personal data, no secrets)
+  be84a0a5fbbc   1012 B  mentat/app/templates/index.html.j2  -- console page template (console_page.py ROOT_TEMPLATE)
+  78972e58660f    233 B  mentat/app/template.csv  -- served at /template.csv; header + 3 placeholder rows (fictitious names)
+  79ee656d8f34    122 B  mentat/Install MENTAT.cmd  -- installer launcher
+  f95b2622ede6  14752 B  mentat/R-packages.lock.tsv  -- R dependency lockfile
+  fa4d55a7761b   1701 B  mentat/app/requirements-hosted.in  -- hosted Python requirements input
+  ffefba45f646    190 B  mentat/mentat.Rproj  -- R project file
+  606051d61bfa  14140 B  mentat/native/mentat-scan/src/main.rs  -- Rust source of mentat-scan (Cargo.toml/Cargo.lock/README already published)
+  87920d220ff4     39 B  mentat/app/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  02e8a4301588     52 B  mentat/app/desktop/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  f0a7cbcc89b2    691 B  mentat/app/geo/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  3a894200bda4    240 B  mentat/forecast/anchors/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  61d22ffb9ac4    224 B  mentat/forecast/contracts/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  0ce381e766b9    313 B  mentat/forecast/ingest/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  2852d91c7c41    245 B  mentat/forecast/refit/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  1ef20b739695    514 B  mentat/tests/fixtures/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  2227f6f7444e  11864 B  mentat/forecast/refit/tests/testthat/fixtures/fold_coefficients.csv  -- refit parity fixture: model output statistics only (terms, sectors, estimates, p-values); no names/addresses
+  656fbea8d876   7069 B  mentat/forecast/refit/tests/testthat/fixtures/full_sample_slopes.csv  -- refit parity fixture: model output statistics only (terms, sectors, estimates, p-values); no names/addresses
+  af6e18d5e99d   2335 B  mentat/forecast/refit/tests/testthat/fixtures/pac_prevchg_reconcile.csv  -- refit parity fixture: model output statistics only (terms, sectors, estimates, p-values); no names/addresses
+  0c40338d227e  21142 B  mentat/forecast/refit/tests/testthat/fixtures/robustness_pvalues.csv  -- refit parity fixture: model output statistics only (terms, sectors, estimates, p-values); no names/addresses
+  5635799410fd  67173 B  mentat/forecast/refit/tests/testthat/fixtures/summary.csv  -- refit parity fixture: model output statistics only (terms, sectors, estimates, p-values); no names/addresses
+  aa47f89e8b15     51 B  ops/desktop/client/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  93fe4b20a93d     38 B  ops/desktop/packaging/.gitignore  -- tracked .gitignore (keeps data/build output out of future uploads)
+  bfbd0ce2e3e9   3375 B  ops/desktop/packaging/native-build.yml.template  -- shared native build workflow template (secret references only, no values)
+
+KEPT-EXCLUDED (private/runtime/licensed data)
+  mentat/inputs/Company Name.xlsx  -- private input workbook (xlsx)
+  mentat/inputs/Credit Union Cross Industry Spending.xlsx  -- private input workbook (xlsx)
+  mentat/inputs/Leadership PACs to candidates, 2021-2022.csv  -- runtime/curated input data (PAC lists), not code
+  mentat/inputs/Leadership PACs to candidates, 2023-2024.csv  -- runtime/curated input data (PAC lists), not code
+  mentat/inputs/Spending Report template.xlsx  -- input workbook (xlsx)
+  mentat/inputs/Super PAC, 527, Carey, 501c.xlsx  -- private input workbook (xlsx)
+  mentat/inputs/Trade Associations.txt  -- curated input data, not code
+  mentat/inputs/company_home_states.csv  -- runtime input data under inputs/ (kept per rule)
+  mentat/inputs/company_match_overrides.csv  -- curated analyst override data under inputs/ (kept per rule)
+  mentat/inputs/name_diminutives.csv  -- reference data under inputs/ (kept per rule); candidate for later inclusion
+  mentat/inputs/name_gender_neutral.csv  -- reference data under inputs/ (kept per rule); candidate for later inclusion
+  mentat/inputs/name_never_merge.csv  -- reference data under inputs/ (kept per rule)
+  mentat/inputs/trade_committee_overrides.csv  -- curated analyst override data under inputs/ (kept per rule)
+  mentat/inputs/verified_company_affiliations.json  -- curated analyst data under inputs/ (kept per rule)
+  mentat/inputs/verified_employer_aliases.csv  -- curated analyst data under inputs/ (kept per rule); carries evidence URLs
+  mentat/forecast/refit/inputs/cycle_model/ibis2026_captured_paths.csv  -- licensed third-party (IBISWorld) figures; ingest/.gitignore says licensed content never goes in git
+  mentat/forecast/refit/inputs/cycle_model/ibis_52412_2024-11_p81_p83.csv  -- licensed third-party (IBISWorld) figures
+  mentat/forecast/refit/inputs/cycle_model/ibis_telecom_2024_p87_p89_p45_p46.csv  -- licensed third-party (IBISWorld) figures
+  mentat/forecast/refit/inputs/cycle_model/pace_series_banks.csv  -- pinned model-input data (not requested for inclusion)
+  mentat/forecast/refit/inputs/cycle_model/pace_series_credit_unions.csv  -- pinned model-input data (not requested for inclusion)
+  mentat/tests/fixtures/memo_redisclosure_cases.json  -- contains real FEC individual contributor names (26 cases; 'Real FAIRSHAKE rows'); FEC donor data is staff-only
+  mentat/tools/pocket/mentat-pocket.html  -- embeds a built data snapshot (one ~120 KB DATA line, 2026-09-14 receipts); template needs data-stripping first
+
+Counts: INCLUDED-NOW 23 (20 mentat + 3 desktop); KEPT-EXCLUDED 22 (all mentat).
+Note: tests that read memo_redisclosure_cases.json or mentat-pocket.html, and code reading the excluded inputs/, need those files supplied separately or replaced by synthetic equivalents.
