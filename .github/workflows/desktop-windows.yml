@@ -261,9 +261,15 @@ jobs:
       # list, not a glob: only tests known to pass on this source (2026-10-17, local run in a hash-locked venv). The third
       # test_mentat_layout case needs MENTAT_TEST_ENGINE (a private engine checkout) and is not run. mentat/tests suites
       # need private fixtures and are not run here (provenance notVerified). Runs before any download or packaging.
+      # The runner's TEMP is an 8.3 short path (C:\Users\RUNNER~1\...). mentat_layout.load_connections resolves its paths,
+      # which expands that to C:\Users\runneradmin\..., while test_mentat_layout builds its expected paths from the unresolved
+      # TEMP, so the two spellings of one folder compare unequal (run 39076231955). The tests therefore run under a long-form
+      # temp folder in RUNNER_TEMP (D:\a\_temp has no short-name component); the code under test is unchanged.
       - name: Python desktop boundary tests (explicit list)
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
+          $env:TEMP = $env:TMP = $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'pytest-tmp'
+          New-Item -ItemType Directory -Force $env:TEMP | Out-Null
           & "$env:TESTVENV\Scripts\python.exe" -E -s -m pytest -p no:cacheprovider -q -rs `
             ops/desktop/packaging/test_staging.py `
             "ops/desktop/packaging/test_mentat_layout.py::MentatLayoutTests::test_installed_code_and_own_data_have_distinct_verified_targets" `
@@ -404,7 +410,9 @@ jobs:
           npm audit --omit=dev --audit-level=high
           # github_release.py (the producer the signing step runs) with its client cross-checks, which need node_modules.
           Push-Location $env:GITHUB_WORKSPACE
-          $log = & "$env:TESTVENV\Scripts\python.exe" -E -s -m pytest -p no:cacheprovider -q -rs ops/desktop/packaging/test_github_release.py 2>&1
+          $env:TEMP = $env:TMP = $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'pytest-tmp'   # long-form temp, as in the boundary tests
+          New-Item -ItemType Directory -Force $env:TEMP | Out-Null
+          $log =& "$env:TESTVENV\Scripts\python.exe" -E -s -m pytest -p no:cacheprovider -q -rs ops/desktop/packaging/test_github_release.py 2>&1
           $code = $LASTEXITCODE; Pop-Location
           $log | Tee-Object -FilePath "$env:OUT\python-tests.log" -Append
           if ($code -ne 0) { throw "test_github_release.py failed (exit $code)" }
