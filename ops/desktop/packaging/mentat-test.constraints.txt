@@ -1,0 +1,21 @@
+# Hash-locked TEST-ONLY tools for the Mentat desktop build (CPython 3.12, cp312 / win_amd64). Never shipped:
+# desktop-windows.yml installs this into a separate test venv together with mentat-runtime.constraints.txt, so the
+# build venv (whose site-packages becomes the bundled runtime) never holds pytest.
+# Generated 2026-10-17 with pip 25.0.1, the same dry-run method as mentat-runtime.constraints.txt, for pytest==9.1.1
+# (the version in melange-runtime.constraints.txt) constrained to packaging==26.3; packaging itself is in the runtime lock.
+# Install: pip install --require-hashes --only-binary=:all: --no-deps -r mentat-runtime.constraints.txt -r mentat-test.constraints.txt
+colorama==0.4.6 \
+    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
+    # colorama-0.4.6-py2.py3-none-any.whl (dependency)
+iniconfig==2.3.1 \
+    --hash=sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7
+    # iniconfig-2.3.1-py3-none-any.whl (dependency)
+pluggy==1.7.0 \
+    --hash=sha256:7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec
+    # pluggy-1.7.0-py3-none-any.whl (dependency)
+pygments==2.21.0 \
+    --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9
+    # pygments-2.21.0-py3-none-any.whl (dependency)
+pytest==9.1.1 \
+    --hash=sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c
+    # pytest-9.1.1-py3-none-any.whl

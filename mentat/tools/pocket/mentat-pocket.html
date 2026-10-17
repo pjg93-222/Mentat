@@ -1,0 +1,1217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mentat Pocket</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mentat">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#f7ede4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#2c2340" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+<style>
+/* ------------------------------------------------------------------ tokens
+   Console design system (acu-theme.css). The COMPLETE light palette lives on
+   bare :root; the dark blocks redefine tokens only, never a rule. */
+:root{
+  --paper:#fcf7f4;
+  --ivory:#f7ede4;
+  --plum:#342649;
+  --purple:#57447b;
+  --gold:#eca91c;
+  --lilac:#d6c8e2;
+  --teal:#327a7a;
+  --line:#e4d9d0;
+  --muted:#716a64;
+  --negative:#bf3f36;
+
+  --page:#fcf7f4;
+  --band:#f7ede4;
+  --card:#ffffff;
+  --ink:#342649;
+  --ink-soft:#716a64;
+  --rule:#e4d9d0;
+
+  --bar:#342649;
+  --bar-active:#57447b;
+
+  --chip-bg:#d6c8e2;
+  --chip-ink:#342649;
+  --chip-on-bg:#57447b;
+  --chip-on-ink:#f7ede4;
+
+  --seg-bg:#efe6dd;
+  --seg-ink:#342649;
+  --seg-on-bg:#342649;
+  --seg-on-ink:#f7ede4;
+
+  --field-bg:#ffffff;
+  --focus:#57447b;
+  --action:#eca91c;
+  --action-ink:#342649;
+
+  /* Party marks, light. Checked with the data-viz palette validator against
+     surface #fcf7f4: lightness band PASS, CVD separation PASS (worst all-pairs
+     dE 16.2 deutan), normal-vision floor PASS (21.8). */
+  --party-dem:#2f5fa8;
+  --party-rep:#b8322e;
+  --party-other:#9a9297;
+
+  --shadow:0 1px 2px rgba(52,38,73,.06);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#221a30;
+    --ivory:#f2e7dc;
+    --plum:#1a1426;
+    --purple:#b9a4d6;
+    --gold:#eca91c;
+    --lilac:#d6c8e2;
+    --teal:#9ed4d5;
+    --line:#3b2f50;
+    --muted:#b2a6bb;
+    --negative:#e8776c;
+
+    --page:#221a30;
+    --band:#2c2340;
+    --card:#292038;
+    --ink:#f5ebe1;
+    --ink-soft:#b2a6bb;
+    --rule:#3b2f50;
+
+    --bar:#d6c8e2;
+    --bar-active:#9ed4d5;
+
+    --chip-bg:#3a2f52;
+    --chip-ink:#f5ebe1;
+    --chip-on-bg:#d6c8e2;
+    --chip-on-ink:#221a30;
+
+    --seg-bg:#332945;
+    --seg-ink:#e8dcd2;
+    --seg-on-bg:#d6c8e2;
+    --seg-on-ink:#221a30;
+
+    --field-bg:#2f2542;
+    --focus:#d6c8e2;
+    --action:#eca91c;
+    --action-ink:#221a30;
+
+    /* Party marks, dark. Blue and red stepped up until each clears 3:1 on the
+       #221a30 ground while every pair check still passes: band PASS, CVD 9.9
+       deutan, normal-vision floor 15.0, contrast PASS. */
+    --party-dem:#4a80d0;
+    --party-rep:#c9564f;
+    --party-other:#9a9297;
+
+    --shadow:none;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#221a30;
+  --ivory:#f2e7dc;
+  --plum:#1a1426;
+  --purple:#b9a4d6;
+  --gold:#eca91c;
+  --lilac:#d6c8e2;
+  --teal:#9ed4d5;
+  --line:#3b2f50;
+  --muted:#b2a6bb;
+  --negative:#e8776c;
+
+  --page:#221a30;
+  --band:#2c2340;
+  --card:#292038;
+  --ink:#f5ebe1;
+  --ink-soft:#b2a6bb;
+  --rule:#3b2f50;
+
+  --bar:#d6c8e2;
+  --bar-active:#9ed4d5;
+
+  --chip-bg:#3a2f52;
+  --chip-ink:#f5ebe1;
+  --chip-on-bg:#d6c8e2;
+  --chip-on-ink:#221a30;
+
+  --seg-bg:#332945;
+  --seg-ink:#e8dcd2;
+  --seg-on-bg:#d6c8e2;
+  --seg-on-ink:#221a30;
+
+  --field-bg:#2f2542;
+  --focus:#d6c8e2;
+  --action:#eca91c;
+  --action-ink:#221a30;
+
+  --party-dem:#4a80d0;
+  --party-rep:#c9564f;
+  --party-other:#9a9297;
+
+  --shadow:none;
+  color-scheme:dark;
+}
+
+/* ------------------------------------------------------------------ base */
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--page);
+  color:var(--ink);
+  font-family:"Albert Sans","Articulat CF",-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+  font-size:15px;
+  line-height:1.45;
+  -webkit-text-size-adjust:100%;
+  -webkit-font-smoothing:antialiased;
+}
+.serif{font-family:"Newsreader","Freight Text Pro",Georgia,"Times New Roman",serif;font-weight:400}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+button{font:inherit;color:inherit;margin:0}
+.wrap{max-width:560px;margin:0 auto}
+
+/* ---------------------------------------------------------------- header */
+.band{
+  background:var(--band);
+  border-bottom:1px solid var(--rule);
+  padding:calc(env(safe-area-inset-top) + 18px) 16px 16px;
+}
+.band .inner{
+  max-width:560px;margin:0 auto;
+  padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);
+}
+.wordmark{font-weight:700;letter-spacing:.06em;font-size:19px;line-height:1;color:var(--ink);margin:0}
+.tagline{margin:5px 0 0;font-size:13px;color:var(--ink-soft)}
+.appname{margin:9px 0 0;font-size:27px;line-height:1.1;color:var(--ink);font-weight:400}
+
+/* ----------------------------------------------------------------- scope */
+.scope{padding:14px 0 4px;border-bottom:1px solid var(--rule);background:var(--page)}
+.chiprow{
+  display:flex;gap:8px;overflow-x:auto;padding:0 16px 12px;
+  padding-left:max(16px,env(safe-area-inset-left));
+  padding-right:max(16px,env(safe-area-inset-right));
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.chiprow::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto;min-height:44px;padding:10px 15px;border-radius:22px;
+  border:1px solid transparent;background:var(--chip-bg);color:var(--chip-ink);
+  font-size:14px;font-weight:500;white-space:nowrap;cursor:pointer;
+}
+.chip[aria-pressed="true"]{background:var(--chip-on-bg);color:var(--chip-on-ink);font-weight:600}
+.field{
+  padding:0 16px 12px;
+  padding-left:max(16px,env(safe-area-inset-left));
+  padding-right:max(16px,env(safe-area-inset-right));
+}
+.field label,.field .lbl{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:5px}
+select{
+  width:100%;min-height:44px;padding:10px 12px;border-radius:10px;
+  border:1px solid var(--rule);background:var(--field-bg);color:var(--ink);
+  font-family:inherit;font-size:15px;line-height:1.3;
+}
+.seg{display:flex;gap:3px;background:var(--seg-bg);border-radius:12px;padding:3px}
+.seg button{
+  flex:1 1 0;min-height:44px;padding:8px 4px;border:0;border-radius:10px;
+  background:transparent;color:var(--seg-ink);font-size:13px;font-weight:500;
+  cursor:pointer;white-space:nowrap;
+}
+.seg button[aria-pressed="true"]{background:var(--seg-on-bg);color:var(--seg-on-ink);font-weight:600}
+
+/* ------------------------------------------------------------------ main */
+main{
+  padding:16px;
+  padding-left:max(16px,env(safe-area-inset-left));
+  padding-right:max(16px,env(safe-area-inset-right));
+  max-width:560px;margin:0 auto;
+}
+.tile,.card{
+  background:var(--card);border:1px solid var(--rule);border-radius:14px;
+  box-shadow:var(--shadow);margin-bottom:14px;
+}
+.tile{padding:15px 16px 16px;border-left:3px solid var(--action)}
+.tile .scopeline{font-size:12px;color:var(--ink-soft);margin:0 0 6px}
+.tile .value{
+  font-family:"Newsreader","Freight Text Pro",Georgia,serif;font-weight:500;
+  font-size:42px;line-height:1.05;letter-spacing:-.01em;margin:0;
+  font-variant-numeric:tabular-nums;
+}
+.tile .value.neg{color:var(--negative)}
+.tile .under{margin:7px 0 0;font-size:13px;color:var(--ink-soft)}
+.tile .means{margin:4px 0 0;font-size:12px;color:var(--ink-soft)}
+/* Collection gaps: the report's own Data Quality check says the stored rows fall short of what FEC reported. */
+.gapline{margin:9px 0 0;font-size:12px;line-height:1.5;color:var(--ink-soft)}
+.gapline[hidden]{display:none}
+.gapchip{display:inline-block;margin-right:6px;padding:1px 8px;border:1px solid var(--action);border-radius:999px;
+  background:var(--band);color:var(--ink);font-size:11px;font-weight:600}
+
+.card{padding:15px 14px 14px}
+.card h2{font-size:21px;line-height:1.2;margin:0;letter-spacing:-.005em;font-weight:400}
+.card .sub{margin:5px 0 0;font-size:12px;color:var(--ink-soft)}
+.cardhead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.toggle{
+  flex:0 0 auto;min-height:44px;min-width:64px;padding:9px 13px;border-radius:10px;
+  border:1px solid var(--rule);background:transparent;color:var(--ink);
+  font-size:13px;font-weight:500;cursor:pointer;
+}
+.toggle[aria-pressed="true"]{background:var(--chip-on-bg);color:var(--chip-on-ink);border-color:transparent}
+.plot{margin-top:12px}
+.plot svg{display:block;width:100%;height:auto}
+.readout{margin:10px 0 0;min-height:34px;font-size:13px;color:var(--ink);border-top:1px solid var(--rule);padding-top:9px}
+.readout.empty{color:var(--ink-soft)}
+.note{margin:9px 0 0;font-size:12px;color:var(--ink-soft)}
+
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+th,td{text-align:left;padding:9px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em}
+td.v,th.v{text-align:right;white-space:nowrap;padding-left:10px;font-variant-numeric:tabular-nums}
+
+.legend{margin:12px 0 0;display:grid;gap:10px}
+.legend .row{display:flex;align-items:flex-start;gap:9px;font-size:13px}
+.legend .sw{flex:0 0 auto;width:13px;height:13px;border-radius:3px;margin-top:3px}
+.legend .nm{flex:1 1 auto}
+.legend .rt{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;text-align:right}
+.legend .amt{font-variant-numeric:tabular-nums;white-space:nowrap}
+.legend .pc{font-size:12px;color:var(--ink-soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+footer{
+  border-top:1px solid var(--rule);background:var(--band);
+  padding:16px;
+  padding-left:max(16px,env(safe-area-inset-left));
+  padding-right:max(16px,env(safe-area-inset-right));
+  padding-bottom:calc(16px + env(safe-area-inset-bottom));
+}
+footer .inner{max-width:560px;margin:0 auto}
+footer p{margin:0 0 6px;font-size:12px;color:var(--ink-soft);line-height:1.5}
+footer p:last-child{margin-bottom:0}
+
+@media (prefers-reduced-motion: no-preference){
+  .chip,.seg button,.toggle{transition:background-color .12s ease,color .12s ease}
+  rect.mark{transition:fill .12s ease,opacity .12s ease}
+}
+</style>
+</head>
+<body>
+
+<header class="band">
+  <div class="inner">
+    <p class="wordmark">MENTAT</p>
+    <p class="tagline">Giving, in perspective.</p>
+    <h1 class="appname serif">Mentat Pocket</h1>
+  </div>
+</header>
+
+<nav class="scope" aria-label="Choose what to show">
+  <div class="chiprow" id="industries" role="group" aria-label="Industry"></div>
+  <div class="wrap">
+    <div class="field">
+      <label for="company">Company</label>
+      <select id="company"></select>
+    </div>
+    <div class="field">
+      <span class="lbl" id="cycles-label">Election cycle</span>
+      <div class="seg" id="cycles" role="group" aria-labelledby="cycles-label"></div>
+    </div>
+    <div class="field">
+      <span class="lbl" id="measures-label">Measure</span>
+      <div class="seg" id="measures" role="group" aria-labelledby="measures-label"></div>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <section class="tile" aria-live="polite">
+    <p class="scopeline" id="tile-scope"></p>
+    <p class="value num" id="tile-value">&nbsp;</p>
+    <p class="under" id="tile-under"></p>
+    <p class="means" id="tile-means"></p>
+    <p class="gapline" id="tile-gap" hidden></p>
+  </section>
+
+  <section class="card" id="card-categories">
+    <div class="cardhead">
+      <div>
+        <h2 class="serif">Recipient categories</h2>
+        <p class="sub" id="sub-categories"></p>
+      </div>
+      <button class="toggle" type="button" data-card="categories" aria-pressed="false">Table</button>
+    </div>
+    <div class="plot" id="plot-categories"></div>
+    <p class="readout empty" id="read-categories" aria-live="polite">Tap a bar for its value and share.</p>
+  </section>
+
+  <section class="card" id="card-cycles">
+    <div class="cardhead">
+      <div>
+        <h2 class="serif">Giving by election cycle</h2>
+        <p class="sub" id="sub-cycles"></p>
+      </div>
+      <button class="toggle" type="button" data-card="cycles" aria-pressed="false">Table</button>
+    </div>
+    <p class="gapline" id="gap-cycles" hidden></p>
+    <div class="plot" id="plot-cycles"></div>
+    <p class="readout empty" id="read-cycles" aria-live="polite">Tap a bar for its value and share.</p>
+  </section>
+
+  <section class="card" id="card-recipients">
+    <div class="cardhead">
+      <div>
+        <h2 class="serif">Top recipients</h2>
+        <p class="sub" id="sub-recipients"></p>
+      </div>
+      <button class="toggle" type="button" data-card="recipients" aria-pressed="false">Table</button>
+    </div>
+    <div class="plot" id="plot-recipients"></div>
+    <p class="readout empty" id="read-recipients" aria-live="polite">Tap a bar for its value and share.</p>
+  </section>
+
+  <section class="card" id="card-party">
+    <div class="cardhead">
+      <div>
+        <h2 class="serif">Party split</h2>
+        <p class="sub" id="sub-party"></p>
+      </div>
+      <button class="toggle" type="button" data-card="party" aria-pressed="false">Table</button>
+    </div>
+    <div class="plot" id="plot-party"></div>
+    <div class="legend" id="legend-party"></div>
+    <p class="readout empty" id="read-party" aria-live="polite">Tap a segment for its value and share.</p>
+    <p class="note" id="note-party"></p>
+  </section>
+</main>
+
+<footer>
+  <div class="inner">
+    <p id="foot-line"></p>
+    <p id="foot-caveat"></p>
+  </div>
+</footer>
+
+<script>
+var DATA = /*__DATA_START__*/{}/*__DATA_END__*/;
+
+(function(){
+  'use strict';
+
+  /* ------------------------------------------------------------- storage */
+  var KEY = 'mentat-pocket-scope-v1';
+  function readState(){
+    try{
+      var raw = window.localStorage.getItem(KEY);
+      return raw ? JSON.parse(raw) : null;
+    }catch(error){ return null; }
+  }
+  function writeState(value){
+    try{ window.localStorage.setItem(KEY, JSON.stringify(value)); }catch(error){ /* private mode */ }
+  }
+
+  /* --------------------------------------------------------- formatting */
+  function commas(n){
+    var sign = n < 0 ? '-' : '';
+    return sign + String(Math.abs(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+  function dollars(cents){
+    /* Thresholds sit just under each round number so that a value which would
+       ROUND up to the next unit is shown in that unit: 999,999 reads $1.0M,
+       never $1,000K. */
+    var value = cents / 100;
+    var sign = value < 0 ? '-' : '';
+    var size = Math.abs(value);
+    if (size >= 999500) return sign + '$' + (size / 1000000).toFixed(1) + 'M';
+    if (size >= 99950) return sign + '$' + commas(size / 1000) + 'K';
+    return sign + '$' + commas(size);
+  }
+  function exactDollars(cents){
+    return (cents < 0 ? '-$' : '$') + commas(Math.abs(cents) / 100);
+  }
+  function percent(part, whole){
+    if (!whole) return 'no share';
+    var share = (part / whole) * 100;
+    if (share !== 0 && Math.abs(share) < 0.1) return share < 0 ? 'under -0.1%' : 'under 0.1%';
+    return share.toFixed(1) + '%';
+  }
+  function plural(n, one, many){
+    return commas(n) + ' ' + (Math.abs(Math.round(n)) === 1 ? one : many);
+  }
+
+  var MEASURES = [
+    { id:'total', label:'Total giving',
+      value:function(a){ return a; }, format:dollars, exact:exactDollars,
+      means:'Net amount of the included receipts, after refunds and negative adjustments.' },
+    { id:'count', label:'Receipts',
+      value:function(a, r){ return r; }, format:commas, exact:commas,
+      means:'Count of included receipt records. One record is one source observation, not necessarily one unique gift.' },
+    { id:'average', label:'Average receipt',
+      value:function(a, r){ return r ? a / r : 0; }, format:exactDollars, exact:exactDollars,
+      means:'Net amount divided by the number of included receipt records, cents dropped.' }
+  ];
+
+  /* ------------------------------------------------------ collection gaps */
+  /* The report's own Data Quality check names the company x cycle cells whose
+     stored rows are materially fewer than FEC reported. The snapshot carries
+     them as industry.gp = { f:1, u:<more cells the check did not itemize>,
+     s:<where the console read the check>, c:[[company, cycle, destination,
+     held, reported, percent], ...] }. The words and the matching rules are
+     coverage-view.js gapNotice's (Chart Studio, Graph and Insights use that
+     one); app/tests/pocket-gaps.test.js runs both over the same scopes and
+     fails if this copy ever says something else. */
+  function gapYear(value){
+    var found = String(value == null ? '' : value).match(/(\d{4})\D*$/);
+    return found ? found[1] : '';
+  }
+  function gapCycle(cycle){
+    var found = String(cycle).match(/^(\d{4})\D+(\d{4})$/);
+    return found ? found[1] + '-' + found[2].slice(2) : String(cycle);
+  }
+  /* company: a name, or '' for every company. cycles: raw cycle labels, or
+     null for every cycle. A cell is named only when the scope touches it; the
+     count of cells the check did not itemize is always said, so a cell that is
+     not listed is never shown as complete. */
+  function gapNotice(gaps, company, cycles){
+    if (!gaps || !gaps.f) return null;
+    var years = (cycles || []).map(gapYear);
+    var all = gaps.c || [];
+    var more = Number(gaps.u) || 0;
+    var lines = all.filter(function(cell){
+      return (!company || cell[0] === company) && (!years.length || years.indexOf(gapYear(cell[1])) !== -1);
+    }).map(function(cell){
+      var shown = typeof cell[5] === 'number' && isFinite(cell[5]) ? cell[5] : Math.round(cell[3] / cell[4] * 100);
+      return cell[0] + ' ' + gapCycle(cell[1]) + ': ' + shown + '% of FEC-reported records ('
+        + commas(cell[3]) + ' of ' + commas(cell[4]) + ' ' + cell[2] + ')';
+    });
+    if (more){
+      lines.push(commas(more) + ' more ' + (more === 1 ? 'short cell is' : 'short cells are')
+        + " not itemized in the workbook's Data Quality check");
+    } else if (!all.length){
+      lines.push("The workbook's Data Quality check reports short collection cells that are not itemized");
+    }
+    if (!lines.length) return null;
+    return { chip:'Coverage gap', caption:lines.join('; '), source:gaps.s || '' };
+  }
+  function renderGap(id, notice){
+    var host = document.getElementById(id);
+    host.textContent = '';
+    host.hidden = !notice;
+    if (!notice) return;
+    var chip = document.createElement('span');
+    chip.className = 'gapchip';
+    chip.textContent = notice.chip;
+    chip.title = notice.caption + (notice.source ? ' · Source: ' + notice.source : '');
+    var words = document.createElement('span');
+    words.textContent = ' ' + notice.caption;
+    host.appendChild(chip);
+    host.appendChild(words);
+  }
+
+  /* ------------------------------------------------------- party mapping */
+  var PARTY_ORDER = [
+    { id:'dem', label:'Democratic', token:'var(--party-dem)', codes:['D','DEM','DEMOCRATIC','DEMOCRAT','DFL'] },
+    { id:'rep', label:'Republican', token:'var(--party-rep)', codes:['R','REP','REPUBLICAN','GOP'] },
+    { id:'other', label:'Other / Unclassified', token:'var(--party-other)', codes:[] }
+  ];
+  function partySlot(raw){
+    var text = String(raw == null ? '' : raw).trim().toUpperCase();
+    for (var i = 0; i < 2; i++){
+      if (PARTY_ORDER[i].codes.indexOf(text) !== -1) return i;
+    }
+    return 2;
+  }
+
+  /* ------------------------------------------------------- text measuring */
+  var WIDE = 'ABCDEFGHKNOPQRSUVXYZ0123456789&@%#$';
+  var NARROW = 'ijlrtfI().,;:\'"!|/-';
+  function textWidth(text, size){
+    var total = 0;
+    for (var i = 0; i < text.length; i++){
+      var ch = text.charAt(i);
+      if (ch === ' ') total += 0.27;
+      else if (ch === 'W' || ch === 'M') total += 0.88;
+      else if (NARROW.indexOf(ch) !== -1) total += 0.34;
+      else if (WIDE.indexOf(ch) !== -1) total += 0.67;
+      else total += 0.56;
+    }
+    return total * size;
+  }
+  function wrap(text, size, maxWidth){
+    var words = String(text).split(/\s+/);
+    var lines = [];
+    var current = '';
+    for (var i = 0; i < words.length; i++){
+      if (!words[i]) continue;
+      var candidate = current ? current + ' ' + words[i] : words[i];
+      if (current && textWidth(candidate, size) > maxWidth){
+        lines.push(current);
+        current = words[i];
+      } else {
+        current = candidate;
+      }
+      /* A single word wider than the line is broken, never clipped. */
+      while (textWidth(current, size) > maxWidth && current.length > 1){
+        var cut = current.length;
+        while (cut > 1 && textWidth(current.slice(0, cut), size) > maxWidth) cut--;
+        lines.push(current.slice(0, cut));
+        current = current.slice(cut);
+      }
+    }
+    if (current) lines.push(current);
+    return lines.length ? lines : [''];
+  }
+
+  /* --------------------------------------------------------- svg helpers */
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function svgEl(name, attrs){
+    var node = document.createElementNS(SVGNS, name);
+    for (var key in attrs){
+      if (Object.prototype.hasOwnProperty.call(attrs, key)) node.setAttribute(key, attrs[key]);
+    }
+    return node;
+  }
+  function svgText(x, y, value, attrs){
+    var node = svgEl('text', attrs || {});
+    node.setAttribute('x', x);
+    node.setAttribute('y', y);
+    node.textContent = value;
+    return node;
+  }
+
+  var W = 340;       /* logical chart width */
+  var GUTTER = 84;   /* reserved so a value label never sits on a bar */
+  var LABEL = 11.5;
+  var VALUE = 12;
+  /* Character widths below are a model, not the real font metrics, so names
+     wrap inside 90% of the box. That margin absorbs the model's error and is
+     why a long committee name wraps instead of running off the right edge. */
+  var NAME_WIDTH = W * 0.9;
+
+  /* One scale per chart; marks are thin; value labels sit in text ink beyond
+     the bar end, inside a reserved gutter. */
+  function horizontalBars(items, options){
+    var track = W - GUTTER;
+    var maxValue = 0;
+    items.forEach(function(item){ maxValue = Math.max(maxValue, Math.abs(item.value)); });
+    var y = 4;
+    var cells = items.map(function(item){
+      var lines = options.wrapNames ? wrap(item.name, LABEL, NAME_WIDTH) : [item.name];
+      var nameHeight = lines.length * (LABEL + 2.5);
+      var top = y;
+      var barY = top + nameHeight + 3;
+      y += Math.max(44, nameHeight + 13 + 16);
+      return { item:item, lines:lines, top:top, barY:barY, bottom:y };
+    });
+    var svg = svgEl('svg', { viewBox:'0 0 ' + W + ' ' + Math.max(y + 2, 40),
+                             role:'img', 'aria-label':options.ariaLabel });
+    cells.forEach(function(cell, index){
+      var item = cell.item;
+      var group = svgEl('g', { role:'button', tabindex:'0', 'data-index':String(index),
+                               'aria-label':item.name + '. ' + options.describe(item) });
+      group.appendChild(svgEl('rect', { x:'0', y:String(cell.top - 2), width:String(W),
+                                        height:String(cell.bottom - cell.top), fill:'transparent' }));
+      cell.lines.forEach(function(line, lineIndex){
+        group.appendChild(svgText(0, cell.top + LABEL + lineIndex * (LABEL + 2.5), line,
+          { 'font-size':String(LABEL), fill:'var(--ink)', 'font-weight':'500' }));
+      });
+      var width = maxValue ? Math.max(2, (Math.abs(item.value) / maxValue) * track) : 2;
+      group.appendChild(svgEl('rect', { x:'0', y:String(cell.barY), width:String(width),
+        height:'13', rx:'2', 'class':'mark',
+        fill: item.value < 0 ? 'var(--negative)' : 'var(--bar)' }));
+      group.appendChild(svgText(width + 7, cell.barY + 10.5, options.formatValue(item),
+        { 'font-size':String(VALUE), fill:'var(--ink)', 'font-variant-numeric':'tabular-nums' }));
+      svg.appendChild(group);
+    });
+    return { svg:svg };
+  }
+
+  function verticalBars(items, options){
+    var height = 172;
+    var base = height - 26;
+    var top = 28;
+    var maxValue = 0;
+    items.forEach(function(item){ maxValue = Math.max(maxValue, Math.abs(item.value)); });
+    var slot = W / items.length;
+    var barWidth = Math.min(66, slot - 28);
+    var svg = svgEl('svg', { viewBox:'0 0 ' + W + ' ' + height, role:'img', 'aria-label':options.ariaLabel });
+    svg.appendChild(svgEl('line', { x1:'0', y1:String(base), x2:String(W), y2:String(base),
+                                    stroke:'var(--rule)', 'stroke-width':'1' }));
+    items.forEach(function(item, index){
+      var centre = slot * index + slot / 2;
+      var barHeight = maxValue ? Math.max(2, (Math.abs(item.value) / maxValue) * (base - top)) : 2;
+      var group = svgEl('g', { role:'button', tabindex:'0', 'data-index':String(index),
+                               'aria-label':item.name + '. ' + options.describe(item) });
+      group.appendChild(svgEl('rect', { x:String(centre - slot / 2), y:'0', width:String(slot),
+                                        height:String(height), fill:'transparent' }));
+      group.appendChild(svgEl('rect', { x:String(centre - barWidth / 2), y:String(base - barHeight),
+        width:String(barWidth), height:String(barHeight), rx:'2', 'class':'mark',
+        fill: item.value < 0 ? 'var(--negative)' : 'var(--bar)' }));
+      group.appendChild(svgText(centre, base - barHeight - 7, options.formatValue(item),
+        { 'font-size':String(VALUE), fill:'var(--ink)', 'text-anchor':'middle',
+          'font-variant-numeric':'tabular-nums' }));
+      group.appendChild(svgText(centre, base + 15, item.name,
+        { 'font-size':String(LABEL), fill:'var(--ink-soft)', 'text-anchor':'middle' }));
+      svg.appendChild(group);
+    });
+    return { svg:svg };
+  }
+
+  /* One stacked 100% bar. Fixed segment order, 2px of surface between marks. */
+  function stackedBar(segments, total, options){
+    var height = 40;
+    var gap = 2;
+    var svg = svgEl('svg', { viewBox:'0 0 ' + W + ' ' + height, role:'img', 'aria-label':options.ariaLabel });
+    /* Only the segments that carry value take a gap, so the bar still spans the
+       full width when one party contributes nothing. */
+    var shares = segments.map(function(segment){ return Math.max(segment.value, 0) / total; });
+    var drawnCount = shares.filter(function(share){ return share > 0; }).length;
+    var usable = W - gap * Math.max(drawnCount - 1, 0);
+    var x = 0;
+    segments.forEach(function(segment, index){
+      /* A segment worth nothing draws nothing. Its tap target is kept, clamped
+         inside the box, so the segments and the legend stay in step. */
+      var width = shares[index] * usable;
+      var visible = width > 0.01;
+      var hitX = Math.min(x, W - 1);
+      var hitWidth = Math.min(visible ? width : 1, W - hitX);
+      var group = svgEl('g', { role:'button', tabindex:'0', 'data-index':String(index),
+                               'aria-label':segment.label + '. ' + options.describe(segment) });
+      group.appendChild(svgEl('rect', { x:String(hitX), y:'0', width:String(hitWidth),
+                                        height:String(height), fill:'transparent' }));
+      group.appendChild(svgEl('rect', { x:String(hitX), y:'5', width:String(visible ? width : 0),
+                                        height:'30', 'class':'mark', fill:segment.token }));
+      svg.appendChild(group);
+      x += width + (visible ? gap : 0);
+    });
+    return { svg:svg };
+  }
+
+  /* ---------------------------------------------------------- data views */
+  function scopeAt(industry, companyIndex){
+    return companyIndex < 0 ? industry.S : industry.C[companyIndex];
+  }
+  function foldByName(rows, cycle){
+    var out = {};
+    rows.forEach(function(row){
+      if (cycle >= 0 && row[0] !== cycle) return;
+      if (!out[row[1]]) out[row[1]] = { amount:0, records:0 };
+      out[row[1]].amount += row[2];
+      out[row[1]].records += row[3];
+    });
+    return out;
+  }
+  function totalsFor(scope, cycle){
+    var amount = 0, records = 0;
+    scope.t.forEach(function(row){
+      if (cycle >= 0 && row[0] !== cycle) return;
+      amount += row[1];
+      records += row[2];
+    });
+    return { amount:amount, records:records };
+  }
+
+  /* ------------------------------------------------------------- render */
+  var state = { industry:0, company:-1, cycle:-1, measure:0 };
+  var tables = { categories:false, cycles:false, recipients:false, party:false };
+  var selection = { categories:-1, cycles:-1, recipients:-1, party:-1 };
+
+  function measure(){ return MEASURES[state.measure]; }
+  function cycleName(industry, index){ return index < 0 ? 'All cycles' : industry.cyc[index]; }
+  function countedSentence(industry){
+    return state.cycle < 0
+      ? 'across ' + industry.cyc[0] + ' to ' + industry.cyc[industry.cyc.length - 1]
+      : 'in ' + industry.cyc[state.cycle];
+  }
+  function scopeName(industry){
+    return state.company < 0 ? industry.n + ', all companies' : industry.co[state.company];
+  }
+  /* The company and cycle the gap line reads: '' is every company, and the
+     raw label (2025-2026) is what the check names, not the card's 2025-26. */
+  function gapCompany(industry){
+    return state.company < 0 ? '' : industry.co[state.company];
+  }
+  function rawCycle(industry, index){
+    return (industry.cyc_raw || industry.cyc)[index];
+  }
+
+  function buildIndustryChips(){
+    var host = document.getElementById('industries');
+    host.textContent = '';
+    DATA.ind.forEach(function(industry, index){
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'chip';
+      button.textContent = industry.n;
+      button.setAttribute('aria-pressed', String(index === state.industry));
+      button.addEventListener('click', function(){
+        if (state.industry === index) return;
+        state.industry = index;
+        state.company = -1;
+        state.cycle = -1;
+        clearSelection();
+        render();
+      });
+      host.appendChild(button);
+    });
+  }
+
+  function buildCompanySelect(){
+    var industry = DATA.ind[state.industry];
+    var select = document.getElementById('company');
+    select.textContent = '';
+    var all = document.createElement('option');
+    all.value = '-1';
+    all.textContent = 'All companies';
+    select.appendChild(all);
+    industry.co.forEach(function(name, index){
+      var option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    select.value = String(state.company);
+  }
+
+  function buildSegments(){
+    var industry = DATA.ind[state.industry];
+    var cycles = document.getElementById('cycles');
+    cycles.textContent = '';
+    [{ label:'All', value:-1 }].concat(industry.cyc.map(function(label, index){
+      return { label:label, value:index };
+    })).forEach(function(option){
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = option.label;
+      button.setAttribute('aria-pressed', String(state.cycle === option.value));
+      button.addEventListener('click', function(){
+        state.cycle = option.value;
+        clearSelection();
+        render();
+      });
+      cycles.appendChild(button);
+    });
+
+    var measures = document.getElementById('measures');
+    measures.textContent = '';
+    MEASURES.forEach(function(entry, index){
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = entry.label;
+      button.setAttribute('aria-pressed', String(state.measure === index));
+      button.addEventListener('click', function(){
+        state.measure = index;
+        clearSelection();
+        render();
+      });
+      measures.appendChild(button);
+    });
+  }
+
+  function clearSelection(){
+    selection = { categories:-1, cycles:-1, recipients:-1, party:-1 };
+  }
+
+  function attach(card, built, items, describe, resting){
+    var host = document.getElementById('plot-' + card);
+    var readout = document.getElementById('read-' + card);
+    host.textContent = '';
+    host.appendChild(built.svg);
+    var groups = built.svg.querySelectorAll('g[role="button"]');
+
+    function paint(){
+      var current = selection[card];
+      for (var i = 0; i < groups.length; i++){
+        var mark = groups[i].querySelector('rect.mark');
+        if (!mark) continue;
+        if (!mark.getAttribute('data-base')) mark.setAttribute('data-base', mark.getAttribute('fill'));
+        var base = mark.getAttribute('data-base');
+        mark.setAttribute('fill', current === i ? 'var(--bar-active)' : base);
+        mark.setAttribute('opacity', current >= 0 && current !== i ? '0.45' : '1');
+      }
+    }
+    function choose(index){
+      selection[card] = selection[card] === index ? -1 : index;
+      paint();
+      if (selection[card] < 0){
+        readout.textContent = resting;
+        readout.className = 'readout empty';
+      } else {
+        readout.textContent = describe(items[index]);
+        readout.className = 'readout';
+      }
+    }
+    for (var i = 0; i < groups.length; i++){
+      (function(node, index){
+        node.addEventListener('click', function(){ choose(index); });
+        node.addEventListener('keydown', function(event){
+          if (event.key === 'Enter' || event.key === ' '){ event.preventDefault(); choose(index); }
+        });
+      })(groups[i], i);
+    }
+    paint();
+    if (selection[card] < 0){
+      readout.textContent = resting;
+      readout.className = 'readout empty';
+    } else {
+      readout.textContent = describe(items[selection[card]]);
+      readout.className = 'readout';
+    }
+  }
+
+  function renderTable(card, columns, rows, resting){
+    var host = document.getElementById('plot-' + card);
+    host.textContent = '';
+    var table = document.createElement('table');
+    var head = document.createElement('tr');
+    var th1 = document.createElement('th');
+    th1.textContent = columns[0];
+    var th2 = document.createElement('th');
+    th2.className = 'v';
+    th2.textContent = columns[1];
+    head.appendChild(th1);
+    head.appendChild(th2);
+    table.appendChild(head);
+    rows.forEach(function(row){
+      var tr = document.createElement('tr');
+      var td1 = document.createElement('td');
+      td1.textContent = row[0];
+      var td2 = document.createElement('td');
+      td2.className = 'v';
+      td2.textContent = row[1];
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      table.appendChild(tr);
+    });
+    host.appendChild(table);
+    var readout = document.getElementById('read-' + card);
+    readout.textContent = resting;
+    readout.className = 'readout empty';
+  }
+
+  /* An empty card says so in words rather than drawing an empty box. */
+  function showNothing(card, industry){
+    var host = document.getElementById('plot-' + card);
+    host.textContent = '';
+    var line = document.createElement('p');
+    line.className = 'note';
+    line.textContent = 'No included receipts for ' + scopeName(industry) + ' in '
+      + cycleName(industry, state.cycle) + '.';
+    host.appendChild(line);
+    var readout = document.getElementById('read-' + card);
+    readout.textContent = 'Nothing to show.';
+    readout.className = 'readout empty';
+  }
+
+  function renderCategories(industry, scope){
+    var folded = foldByName(scope.k, state.cycle);
+    var keys = Object.keys(folded);
+    var items = keys.map(function(key){
+      var cell = folded[key];
+      return { name:industry.cat[Number(key)], amount:cell.amount, records:cell.records,
+               value:measure().value(cell.amount, cell.records) };
+    }).sort(function(a, b){ return b.value - a.value; }).slice(0, 10);
+    var shown = items.reduce(function(sum, item){ return sum + item.value; }, 0);
+    document.getElementById('sub-categories').textContent =
+      'Included receipts ' + countedSentence(industry) + ' for ' + scopeName(industry)
+      + ', grouped by the category recorded for the recipient. '
+      + (items.length
+          ? items.length + ' of ' + keys.length + ' categories, largest first.'
+          : 'No categories, because this scope has no included receipts in this period.');
+    if (!items.length){
+      showNothing('categories', industry);
+      return;
+    }
+    var describe = function(item){
+      return item.name + ' · ' + measure().exact(item.value) + ' · '
+        + plural(item.records, 'receipt', 'receipts') + ' · '
+        + percent(item.value, shown) + ' of the ' + items.length + ' categories shown';
+    };
+    if (tables.categories){
+      renderTable('categories', ['Recipient category', measure().label],
+        items.map(function(item){ return [item.name, measure().exact(item.value)]; }),
+        'Table view. ' + items.length + ' categories, largest first.');
+      return;
+    }
+    attach('categories', horizontalBars(items, { ariaLabel:'Recipient categories', wrapNames:false,
+      formatValue:function(item){ return measure().format(item.value); }, describe:describe }),
+      items, describe, 'Tap a bar for its value and share.');
+  }
+
+  function renderCycles(industry, scope){
+    var items = industry.cyc.map(function(label, index){
+      var cell = totalsFor(scope, index);
+      return { name:label, amount:cell.amount, records:cell.records,
+               value:measure().value(cell.amount, cell.records) };
+    });
+    var across = items.reduce(function(sum, item){ return sum + item.value; }, 0);
+    document.getElementById('sub-cycles').textContent =
+      'Included receipts for ' + scopeName(industry)
+      + ', one bar per election cycle. The cycle control above does not narrow this card.';
+    renderGap('gap-cycles', gapNotice(industry.gp, gapCompany(industry), null));
+    var describe = function(item){
+      return item.name + ' · ' + measure().exact(item.value) + ' · '
+        + plural(item.records, 'receipt', 'receipts') + ' · '
+        + (measure().id === 'average'
+            ? 'all three cycles average ' + measure().exact(totalsAverage(scope))
+            : percent(item.value, across) + ' of all three cycles');
+    };
+    if (tables.cycles){
+      renderTable('cycles', ['Election cycle', measure().label],
+        items.map(function(item){ return [item.name, measure().exact(item.value)]; }),
+        'Table view. Three election cycles.');
+      return;
+    }
+    attach('cycles', verticalBars(items, { ariaLabel:'Giving by election cycle',
+      formatValue:function(item){ return measure().format(item.value); }, describe:describe }),
+      items, describe, 'Tap a bar for its value and share.');
+  }
+
+  function totalsAverage(scope){
+    var all = totalsFor(scope, -1);
+    return all.records ? all.amount / all.records : 0;
+  }
+
+  function renderRecipients(industry, scope){
+    var raw = scope.r[state.cycle < 0 ? 'a' : String(state.cycle)] || [];
+    var items = raw.map(function(row){
+      return { name:industry.rec[row[0]], amount:row[1], records:row[2],
+               value:measure().value(row[1], row[2]) };
+    });
+    if (measure().id !== 'total'){
+      items = items.slice().sort(function(a, b){ return b.value - a.value; });
+    }
+    var scopeTotals = totalsFor(scope, state.cycle);
+    var scopeValue = measure().value(scopeTotals.amount, scopeTotals.records);
+    document.getElementById('sub-recipients').textContent =
+      'The ' + (items.length || 'top') + ' committees that received the most from '
+      + scopeName(industry) + ' ' + countedSentence(industry)
+      + ', ranked by total giving' + (measure().id === 'total' ? '.' : ', then shown by '
+      + measure().label.toLowerCase() + '.');
+    var describe = function(item){
+      return item.name + ' · ' + measure().exact(item.value) + ' · '
+        + plural(item.records, 'receipt', 'receipts') + ' · '
+        + (measure().id === 'average'
+            ? 'the whole scope averages ' + measure().exact(scopeValue)
+            : percent(item.value, scopeValue) + ' of the ' + scopeName(industry) + ' total '
+              + countedSentence(industry));
+    };
+    if (!items.length){
+      showNothing('recipients', industry);
+      return;
+    }
+    if (tables.recipients){
+      renderTable('recipients', ['Recipient committee', measure().label],
+        items.map(function(item){ return [item.name, measure().exact(item.value)]; }),
+        'Table view. ' + items.length + ' committees.');
+      return;
+    }
+    attach('recipients', horizontalBars(items, { ariaLabel:'Top recipients', wrapNames:true,
+      formatValue:function(item){ return measure().format(item.value); }, describe:describe }),
+      items, describe, 'Tap a bar for its value and share.');
+  }
+
+  function renderParty(industry, scope){
+    /* A 100% bar can only compose measures that add up. An average does not,
+       so the bar stays on total giving and the card says so. */
+    var composing = measure().id === 'average' ? MEASURES[0] : measure();
+    var folded = foldByName(scope.p, state.cycle);
+    var slots = PARTY_ORDER.map(function(entry){
+      return { id:entry.id, label:entry.label, token:entry.token, amount:0, records:0, sources:[] };
+    });
+    var present = false;
+    Object.keys(folded).forEach(function(key){
+      var raw = industry.par[Number(key)];
+      var slot = slots[partySlot(raw)];
+      slot.amount += folded[key].amount;
+      slot.records += folded[key].records;
+      if (slot.sources.indexOf(raw) === -1) slot.sources.push(raw === '' ? '(blank)' : raw);
+      present = true;
+    });
+    slots.forEach(function(slot){ slot.value = composing.value(slot.amount, slot.records); });
+    var total = slots.reduce(function(sum, slot){ return sum + Math.max(slot.value, 0); }, 0);
+    var negative = slots.filter(function(slot){ return slot.value < 0; });
+
+    var host = document.getElementById('plot-party');
+    var legend = document.getElementById('legend-party');
+    var note = document.getElementById('note-party');
+    var readout = document.getElementById('read-party');
+    legend.textContent = '';
+
+    document.getElementById('sub-party').textContent =
+      'Included receipts ' + countedSentence(industry) + ' for ' + scopeName(industry)
+      + ', split by the party recorded for the recipient committee.';
+
+    if (!present || !total){
+      /* Distinguish "nothing was given" from "giving exists but carries no
+         party", because those are different facts about the source. */
+      var scopeTotals = totalsFor(scope, state.cycle);
+      host.textContent = '';
+      var missing = document.createElement('p');
+      missing.className = 'note';
+      missing.textContent = scopeTotals.records === 0
+        ? 'No included receipts for ' + scopeName(industry) + ' in '
+          + cycleName(industry, state.cycle) + ', so there is no split to show.'
+        : 'The source records no recipient party for ' + scopeName(industry) + ' '
+          + countedSentence(industry) + ', so there is no split to show.';
+      host.appendChild(missing);
+      readout.textContent = 'Nothing to show.';
+      readout.className = 'readout empty';
+      note.textContent = '';
+      return;
+    }
+
+    /* Name the denominator exactly. The party dimension covers every included
+       receipt -- "Other / Unclassified" is the source's own bucket for a
+       recipient with no party -- so the three segments normally add back to the
+       whole scope. Only say so when the arithmetic actually holds here. */
+    var scopeTotals = totalsFor(scope, state.cycle);
+    var scopeValue = composing.value(scopeTotals.amount, scopeTotals.records);
+    var whole = total === scopeValue;
+    var denominator = whole
+      ? (composing.id === 'count' ? 'every included receipt for ' : 'all giving for ')
+        + scopeName(industry) + ' ' + countedSentence(industry)
+      : 'the three segments shown';
+    /* The readout is one line on a phone; the note beside it carries the full
+       naming of the same denominator. */
+    var shortDenominator = whole ? 'the scope total' : 'the three segments shown';
+
+    var extra = slots[2].sources.filter(function(name){ return name !== slots[2].label; }).sort();
+    note.textContent = 'Segments are shares of ' + composing.exact(total) + ', ' + denominator + '.'
+      + ' Other / Unclassified is the source’s own bucket for a recipient with no party'
+      + (extra.length ? ', and folds ' + extra.join(', ') : '') + '.'
+      + (negative.length ? ' ' + negative.map(function(s){ return s.label; }).join(' and ')
+          + ' is net negative after refunds and is drawn as an empty segment.' : '')
+      + (measure().id === 'average'
+          ? ' Average receipt does not compose to a whole, so this bar stays on total giving.' : '');
+
+    var describe = function(slot){
+      return slot.label + ' · ' + composing.exact(slot.value) + ' · '
+        + plural(slot.records, 'receipt', 'receipts') + ' · '
+        + percent(slot.value, total) + ' of ' + shortDenominator;
+    };
+
+    if (tables.party){
+      renderTable('party', ['Party', composing.label],
+        slots.map(function(slot){ return [slot.label, composing.exact(slot.value)]; }),
+        'Table view. Three fixed segments.');
+    } else {
+      attach('party', stackedBar(slots, total, { ariaLabel:'Party split', describe:describe }),
+        slots, describe, 'Tap a segment for its value and share.');
+    }
+
+    slots.forEach(function(slot){
+      var row = document.createElement('div');
+      row.className = 'row';
+      var swatch = document.createElement('span');
+      swatch.className = 'sw';
+      swatch.style.background = slot.token;
+      var name = document.createElement('span');
+      name.className = 'nm';
+      name.textContent = slot.label;
+      var right = document.createElement('span');
+      right.className = 'rt';
+      var amount = document.createElement('span');
+      amount.className = 'amt num';
+      amount.textContent = composing.exact(slot.value);
+      var share = document.createElement('span');
+      share.className = 'pc num';
+      share.textContent = percent(slot.value, total) + ' of ' + composing.exact(total);
+      right.appendChild(amount);
+      right.appendChild(share);
+      row.appendChild(swatch);
+      row.appendChild(name);
+      row.appendChild(right);
+      legend.appendChild(row);
+    });
+  }
+
+  function renderTile(industry, scope){
+    var totals = totalsFor(scope, state.cycle);
+    var value = measure().value(totals.amount, totals.records);
+    document.getElementById('tile-scope').textContent =
+      industry.n + ' · ' + (state.company < 0 ? 'All companies' : industry.co[state.company])
+      + ' · ' + cycleName(industry, state.cycle);
+    var node = document.getElementById('tile-value');
+    node.textContent = measure().format(value);
+    node.className = 'value num' + (value < 0 ? ' neg' : '');
+    document.getElementById('tile-under').textContent =
+      plural(totals.records, 'receipt', 'receipts') + ' · '
+      + (state.company < 0 ? plural(industry.co.length, 'company', 'companies') : '1 company');
+    document.getElementById('tile-means').textContent = measure().means;
+    renderGap('tile-gap', gapNotice(industry.gp, gapCompany(industry),
+      state.cycle < 0 ? null : [rawCycle(industry, state.cycle)]));
+  }
+
+  function render(){
+    var industry = DATA.ind[state.industry];
+    if (state.company >= industry.co.length) state.company = -1;
+    if (state.cycle >= industry.cyc.length) state.cycle = -1;
+    buildIndustryChips();
+    buildCompanySelect();
+    buildSegments();
+    var scope = scopeAt(industry, state.company);
+    renderTile(industry, scope);
+    renderCategories(industry, scope);
+    renderCycles(industry, scope);
+    renderRecipients(industry, scope);
+    renderParty(industry, scope);
+    writeState(state);
+  }
+
+  /* --------------------------------------------------------------- boot */
+  function boot(){
+    var saved = readState();
+    if (saved && typeof saved === 'object'){
+      if (typeof saved.industry === 'number' && DATA.ind[saved.industry]) state.industry = saved.industry;
+      var industry = DATA.ind[state.industry];
+      if (typeof saved.company === 'number' && saved.company >= -1 && saved.company < industry.co.length){
+        state.company = saved.company;
+      }
+      if (typeof saved.cycle === 'number' && saved.cycle >= -1 && saved.cycle < industry.cyc.length){
+        state.cycle = saved.cycle;
+      }
+      if (typeof saved.measure === 'number' && MEASURES[saved.measure]) state.measure = saved.measure;
+    }
+
+    document.getElementById('company').addEventListener('change', function(event){
+      state.company = Number(event.target.value);
+      clearSelection();
+      render();
+    });
+
+    var toggles = document.querySelectorAll('.toggle');
+    for (var i = 0; i < toggles.length; i++){
+      (function(button){
+        button.addEventListener('click', function(){
+          var card = button.getAttribute('data-card');
+          tables[card] = !tables[card];
+          button.setAttribute('aria-pressed', String(tables[card]));
+          button.textContent = tables[card] ? 'Chart' : 'Table';
+          selection[card] = -1;
+          render();
+        });
+      })(toggles[i]);
+    }
+
+    document.getElementById('foot-line').textContent =
+      'Snapshot ' + DATA.g + ' · ' + DATA.b
+      + ' · Provisional totals; unresolved giving remains in review.';
+    document.getElementById('foot-caveat').textContent = DATA.bc;
+
+    render();
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
