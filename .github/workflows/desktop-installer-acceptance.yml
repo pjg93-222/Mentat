@@ -1,4 +1,4 @@
-# Installer acceptance for the published Mentat 1.0.3 unsigned Windows installer.
+# Installer acceptance for the published Mentat 1.0.5 unsigned Windows installer.
 # Repository file: .github/workflows/desktop-installer-acceptance.yml (pjg93-222/Mentat).
 #
 # Downloads the EXISTING release asset (public URL, no token), verifies its sha256, records the
@@ -35,14 +35,14 @@ jobs:
     env:
       APP_ID: mentat
       APP_NAME: Mentat
-      APP_VERSION: '1.0.3'
+      APP_VERSION: '1.0.5'
       RELEASE_REPO: pjg93-222/Mentat
-      RELEASE_TAG: desktop-preview-v1.0.3
-      ASSET: Mentat-1.0.3-win-x64-unsigned-installer.exe
-      ASSET_SHA256: c239a77edf6cbd15572904e4981959aec7179f54359d44b60cbe75b39ea5a858
-      ZIP: Mentat-1.0.3-win-x64-unsigned-preview.zip
-      ZIP_SHA256: 54aa6ea0e26d34f2947a2d18ca06313733627dfa319732f0c14e09275e90fb40
-      ZIP_EXPECTED_NOTE: 'none: exact parity (the local comparison found 12,510/12,510 identical; the 193 smoke .pyc files were removed before zipping and were never in the installer)'
+      RELEASE_TAG: desktop-preview-v1.0.5
+      ASSET: Mentat-1.0.5-win-x64-unsigned-installer.exe
+      ASSET_SHA256: de4ca0ae491ff4128510c0e37df1553bdc5515a335a97a9b0a08ebe22f316289
+      ZIP: Mentat-1.0.5-win-x64-unsigned-preview.zip
+      ZIP_SHA256: b148315c60b8edf8f93e04d1fd57a52921aeec622c8d5e6966a9ccfba4298315
+      ZIP_EXPECTED_NOTE: 'none: exact parity (the hosted build zipped win-unpacked before any smoke)'
     defaults:
       run:
         shell: pwsh
