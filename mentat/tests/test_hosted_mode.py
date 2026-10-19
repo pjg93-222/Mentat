@@ -496,16 +496,24 @@ class DefaultModeIsUnchanged(unittest.TestCase):
             status, _, _ = self.plain.request('/api/forecast/project', method='POST', data={})
             self.assertEqual(status, 403)
 
-    def test_no_hosted_routes_headers_or_log_lines(self):
-        for route in ('/healthz', '/version'):
-            status, _, body = self.plain.request(route)
-            self.assertEqual((status, body), (404, {'error': 'Not found.'}), route)
+    def test_health_routes_but_no_hosted_headers_or_log_lines(self):
+        status, _, body = self.plain.request('/healthz')
+        self.assertEqual((status, body), (200, {'status': 'ok'}))
+        status, _, body = self.plain.request('/version')
+        self.assertEqual((status, body['app'], set(body)), (200, 'mentat-console', {'app', 'git_sha', 'build_time', 'snapshot_id'}))
         status, headers, _ = self.plain.request('/app.js')
         self.assertEqual(status, 200)
         self.assertEqual(headers['Cache-Control'], 'private, no-cache')
         for name in ('Referrer-Policy', 'X-Frame-Options', 'Cross-Origin-Resource-Policy'):
             self.assertNotIn(name, headers)
         self.assertEqual(self.plain.stderr, '', 'a local console logs nothing')
+
+    def test_local_health_routes_keep_the_loopback_host_check(self):
+        for host in ('evil.example', 'localhost'):
+            status, _, body = self.plain.request('/healthz', headers={'Host': host})
+            self.assertEqual((status, body), (403, {'error': 'Local access only.'}), host)
+        status, _, _ = self.plain.request('/healthz', method='POST', data={}, headers={'Host': f'localhost:{self.plain.port}'})
+        self.assertEqual(status, 403, 'a POST to a health route still needs the token')
 
     def test_other_verbs_and_the_local_answers_are_what_they_were(self):
         for method in ('PUT', 'DELETE', 'HEAD', 'OPTIONS'):
@@ -1467,7 +1475,7 @@ class ReceiptPaths(unittest.TestCase):
     """Receipts and accepted-source pointers hold Windows paths; Linux must still find the files."""
 
     def as_linux(self, text):
-        with patch.object(receipt_paths, 'os', SimpleNamespace(name='posix')):
+        with patch.object(receipt_paths, 'os', SimpleNamespace(name='posix', environ={})):
             return receipt_paths.receipt_path(text)
 
     def relative_to_project(self, text):
@@ -1513,7 +1521,7 @@ class ReceiptPaths(unittest.TestCase):
         fake_stamp = lambda path: guard.LOADED_ALGORITHM_STAMP if path == guard.__file__ else (str(path), 1, 1, 1)
         with patch.object(guard, '_stamp', side_effect=fake_stamp), patch.object(guard, '_read', return_value=pointer), \
                 patch.object(guard, '_quiescent'), patch.object(guard, '_verify_cached', return_value='proof') as verified, \
-                patch.object(receipt_paths, 'os', SimpleNamespace(name='posix')):
+                patch.object(receipt_paths, 'os', SimpleNamespace(name='posix', environ={})):
             self.assertEqual(guard.verify(source), 'proof')
         expected = (guard.ACCEPTED_ROOT / 'x' / '2022-2024-2026' / 's.db').resolve()
         self.assertEqual(Path(verified.call_args.args[2][0]), expected)
@@ -1533,12 +1541,12 @@ class ReceiptPaths(unittest.TestCase):
             arguments = (stamp(database), stamp(pointer), stamp(snapshot), 'not-its-hash', 'original', 'X', 'algorithm',
                          str(temp))
             # The pointer names the snapshot, so verification moves on to the next check (the database's hash).
-            with patch.object(receipt_paths, 'os', SimpleNamespace(name='posix')):
+            with patch.object(receipt_paths, 'os', SimpleNamespace(name='posix', environ={})):
                 with self.assertRaisesRegex(ValueError, 'recovered database changed'):
                     guard._verify_cached.__wrapped__(*arguments)
             # Named some other snapshot, it is refused at the pointer.
             pointer.write_text(pointer.read_text().replace('\\\\s.db', '\\\\other.db'))
-            with patch.object(receipt_paths, 'os', SimpleNamespace(name='posix')):
+            with patch.object(receipt_paths, 'os', SimpleNamespace(name='posix', environ={})):
                 with self.assertRaisesRegex(ValueError, 'does not match the original published source scope'):
                     guard._verify_cached.__wrapped__(*arguments)
 
