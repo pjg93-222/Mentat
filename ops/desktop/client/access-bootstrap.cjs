@@ -1,6 +1,6 @@
 'use strict';
 const crypto=require('node:crypto'),path=require('node:path');const {spawnSync}=require('node:child_process');
-const {AccessClient,descriptor,refreshDescriptor}=require('./access-client.cjs');
+const {AccessClient,descriptor,refreshDescriptor,canonical}=require('./access-client.cjs');
 const {accessStateStore,protectedAccess}=require('./access-state.cjs');
 const {accessSecrets,passwordStore}=require('./access-credentials.cjs');
 const {LocalAccess}=require('./local-access.cjs');const {DesktopAccessGate}=require('./access-gate.cjs');
@@ -25,12 +25,20 @@ function ownerDataBindings(resources,appId,profile,configuration,grant){
   return {districtId:district,dataRoot:roots.data,localUserId:value.localUserId,localUsername:value.localUsername};
  });
 }
+// The bundled descriptor ships inside the signed package, so a newer build may move the server
+// address or update keys. refreshDescriptor still refuses any change to the verification identity.
+async function adoptBundledTrust(store,stored,bundled){
+ const next=refreshDescriptor(stored,bundled);
+ // A failed write must not block launch: the identity-checked descriptor still applies this session and is retried next start.
+ if(canonical(next)!==canonical(stored))try{await store.write(next);}catch{/* retried on next launch */}
+ return next;
+}
 async function bootstrapAccess({resources,appId,profile,configuration,packaged,bundledTrust}){
  if(process.platform!=='win32'||process.arch!=='x64')throw new Error('This access build supports Windows x64 only');
  const store=kind=>accessStateStore({resources,appId,profile,kind}),trustStore=store('trust');
  let trust=await trustStore.read();
  if(packaged&&!bundledTrust)throw new Error('This recipient package has no administrator trust descriptor');
- if(bundledTrust){const bundled=descriptor(bundledTrust);if(trust){refreshDescriptor(bundled,trust);}else{trust=bundled;await trustStore.write(trust);}}
+ if(bundledTrust){const bundled=descriptor(bundledTrust);if(trust)trust=await adoptBundledTrust(trustStore,trust,bundled);else{trust=bundled;await trustStore.write(trust);}}
  if(!trust)throw new Error('Import the administrator trust descriptor in Settings');
  trust=descriptor(trust);
  const identityStore=store('identity');let saved=await identityStore.read();
@@ -52,4 +60,4 @@ async function importTrust({resources,appId,profile,packaged,bundledTrust,value}
  const checked=pinned?refreshDescriptor(pinned,next):next;
  await store.write(checked);return checked;
 }
-module.exports={bootstrapAccess,importTrust,exactIdentity,ownerDataBindings};
+module.exports={bootstrapAccess,adoptBundledTrust,importTrust,exactIdentity,ownerDataBindings};
