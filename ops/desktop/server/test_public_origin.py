@@ -135,7 +135,8 @@ def test_explicit_public_origin_over_real_tls_keeps_auth_and_enrollment_trust(tm
     pair = publisher.pairing('melange', origin)
     assert json.loads(base64.urlsafe_b64decode(pair + '=' * (-len(pair) % 4)))['url'] == origin
     value = dict(requestId=str(uuid.uuid4()), deviceId=str(uuid.uuid4()), appId='melange',
-                 platform='win32', arch='x64', displayName='Synthetic recipient', requestSecret=secrets.token_urlsafe(32))
+                 platform='win32', arch='x64', displayName='Synthetic recipient', requestSecret=secrets.token_urlsafe(32),
+                 inviteCode=access.issue_invite('fixture', 100, 30)['code'])
     access.request(value, '203.0.113.10')
     approval = access.approve(value['requestId'], 'local_user', [])
     activated = access.activate({**{key: value[key] for key in ('requestId', 'deviceId', 'appId', 'platform', 'arch')},

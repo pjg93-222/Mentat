@@ -26,11 +26,19 @@ class AccessStoreTests(unittest.TestCase):
         self.now = 1800000000
         self.store = AccessStore(self.publisher, clock=lambda: self.now)
         self.store.initialize()
+        self.invite_left = 0
+
+    def invite(self):
+        """A multi-use fixture invite, replaced before it runs out so request fixtures keep their meaning."""
+        if self.invite_left < 1:
+            self.invite_code, self.invite_left = self.store.issue_invite('fixture', 100, 30)['code'], 100
+        self.invite_left -= 1
+        return self.invite_code
 
     def request(self, app='melange', device=None, source='192.168.2.3'):
         value = dict(requestId=str(uuid.uuid4()), deviceId=device or str(uuid.uuid4()),
                      appId=app, platform='win32', arch='x64', displayName='Synthetic recipient',
-                     requestSecret=secrets.token_urlsafe(32))
+                     requestSecret=secrets.token_urlsafe(32), inviteCode=AccessStoreTests.invite(self))
         self.store.request(value, source)
         return value
 

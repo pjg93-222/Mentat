@@ -6,6 +6,7 @@ import sys
 import threading
 import unittest
 from urllib.parse import urlsplit, parse_qs
+import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from admin_dashboard import AdminSession, create_server, STATIC, CLIENT
@@ -63,6 +64,42 @@ class AdminDashboardTests(unittest.TestCase):
         request2 = store_tests.AccessStoreTests.request(self, 'mentat')
         self.assertEqual(self.call('/deny', {'requestId':request2['requestId']}, headers)[0], 200)
         self.assertEqual(self.store.poll(request2['requestId'], request2['requestSecret'])['status'], 'denied')
+
+    def test_invite_issue_list_and_revoke_routes_share_the_mutation_guard(self):
+        headers = self.session()
+        status, issued = self.call('/invite-issue', {'label': 'Tester', 'uses': 2, 'days': 3}, headers)
+        self.assertEqual(status, 200)
+        self.assertEqual(set(issued), {'inviteId', 'code', 'expiresAt', 'maxUses'})
+        self.assertEqual(issued['maxUses'], 2)
+        self.store.request(dict(requestId=str(uuid.uuid4()), deviceId=str(uuid.uuid4()), appId='melange', platform='win32', arch='x64',
+                                displayName='Synthetic recipient', requestSecret=secrets.token_urlsafe(32), inviteCode=issued['code']), '203.0.113.5')
+        status, snapshot = self.call('/dashboard', {}, headers)
+        listed = [invite for invite in snapshot['invites'] if invite['inviteId'] == issued['inviteId']]
+        self.assertEqual((status, [(i['label'], i['uses'], i['maxUses'], i['state']) for i in listed]), (200, [('Tester', 1, 2, 'active')]))
+        for secret in (issued['code'], issued['code'].replace('-', ''), 'code_hash'):
+            self.assertNotIn(secret, json.dumps(snapshot))
+        for bad in ({'label': 'x', 'uses': 1}, {'label': 'x', 'uses': 1, 'days': 1, 'extra': 1}, {'label': '', 'uses': 1, 'days': 7},
+                    {'label': 'x', 'uses': True, 'days': 7}, {'label': 'x', 'uses': 0, 'days': 7}, {'label': 'x', 'uses': 1, 'days': 31}):
+            self.assertEqual(self.call('/invite-issue', bad, headers)[0], 403)
+        for bad in ({}, {'inviteId': str(uuid.uuid4())}, {'inviteId': 'x'}, {'inviteId': issued['inviteId'], 'extra': 1}):
+            self.assertEqual(self.call('/invite-revoke', bad, headers)[0], 403)
+        for route, value in (('/invite-issue', {'label': 'Refused', 'uses': 1, 'days': 7}), ('/invite-revoke', {'inviteId': issued['inviteId']})):
+            for override in ({'Origin': 'http://127.0.0.1:1'}, {'Host': 'rebound.invalid'}, {'X-Admin-CSRF': secrets.token_urlsafe(32)},
+                             {'Authorization': 'Bearer ' + secrets.token_urlsafe(32)}):
+                self.assertEqual(self.call(route, value, {**headers, **override})[0], 403)
+            self.assertEqual(self.call(route, value)[0], 403)
+        self.assertEqual(self.call('/invite-revoke', {'inviteId': issued['inviteId']}, headers), (200, {'ok': True}))
+        self.assertEqual(self.call('/invite-revoke', {'inviteId': issued['inviteId']}, headers)[0], 403)
+        self.assertEqual([i['state'] for i in self.store.dashboard()['invites'] if i['inviteId'] == issued['inviteId']], ['revoked'])
+        self.assertEqual([i['label'] for i in self.store.dashboard()['invites']], ['Tester'])
+
+    def test_invites_view_is_wired_and_the_code_is_never_kept(self):
+        html = (STATIC/'index.html').read_text(encoding='utf-8')
+        script = (STATIC/'app.js').read_text(encoding='utf-8')
+        for fragment in ('data-view="invites"', 'id="invites"', 'id="invite-form"', 'id="invite-label"', 'id="invite-uses"', 'id="invite-days"'):
+            self.assertIn(fragment, html)
+        for fragment in ('/invite-issue', '/invite-revoke', "'invites'"):
+            self.assertIn(fragment, script)
 
     def test_session_expiry_and_static_ui_use_no_ambient_storage(self):
         clock = [0]; session = AdminSession(clock=lambda:clock[0]); bootstrap = session.bootstrap
