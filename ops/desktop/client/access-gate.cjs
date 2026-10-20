@@ -1,7 +1,7 @@
 'use strict';
 const {checkedRecord}=require('./local-access.cjs');
 const NAMES={melange:'Melange',mentat:'Mentat',terrier:'Terrier'};
-function argument(value,key){if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).join('|')!==key||typeof value[key]!=='string')throw new Error('Invalid access action');return value[key];}
+function argument(value,key,...more){const keys=[key,...more];if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join('|')!==keys.sort().join('|')||keys.some(name=>typeof value[name]!=='string'))throw new Error('Invalid access action');return value[key];}
 class DesktopAccessGate{
  constructor({appId,client,local,passwords,configuration,owner=async()=>null,now=Date.now}){
   if(!NAMES[appId])throw new Error('Unsupported app');Object.assign(this,{appId,client,local,passwords,configuration,owner,now});this.accepted=null;this.requestReply=null;this.cleanupPending=false;this.busy=false;
@@ -29,9 +29,9 @@ class DesktopAccessGate{
   try{
    const state=await this.info();
    if(method==='request'){
-    const displayName=argument(payload,'displayName');if(displayName.trim()!==displayName)throw new Error('Invalid display name');
+    const displayName=argument(payload,'displayName','inviteCode'),inviteCode=payload.inviteCode.trim();if(displayName.trim()!==displayName)throw new Error('Invalid display name');if(inviteCode.length<1||inviteCode.length>64)throw new Error('Invalid invite code');
     if(state.phase!=='needs_request'&&!state.canRequestAgain)throw new Error('Current request must be preserved');
-    this.requestReply=await this.client.requestAccess(displayName,{newRequest:state.phase==='pending',reapproval:Boolean(this.accepted)});
+    this.requestReply=await this.client.requestAccess(displayName,{newRequest:state.phase==='pending',reapproval:Boolean(this.accepted),inviteCode});
    }else if(method==='poll'){
     if(payload!==undefined||state.phase!=='pending')throw new Error('No pending request');this.requestReply=await this.client.poll();
    }else if(method==='activate'){

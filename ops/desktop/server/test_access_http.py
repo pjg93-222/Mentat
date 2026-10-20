@@ -41,7 +41,38 @@ class AccessHTTPTests(unittest.TestCase):
 
     def request_value(self):
         return dict(requestId=str(uuid.uuid4()), deviceId=str(uuid.uuid4()), appId='melange',
-                    platform='win32', arch='x64', displayName='Synthetic request', requestSecret=secrets.token_urlsafe(32))
+                    platform='win32', arch='x64', displayName='Synthetic request', requestSecret=secrets.token_urlsafe(32),
+                    inviteCode=store_tests.AccessStoreTests.invite(self))
+
+    def post_request(self, value):
+        connection = http.client.HTTPSConnection('127.0.0.1', self.server.server_port, context=self.context, timeout=3)
+        try:
+            connection.request('POST', '/v1/access/requests', json.dumps(value), {'Content-Type': 'application/json'})
+            response = connection.getresponse()
+            return response.status, json.loads(response.read()), response.getheader('Retry-After')
+        finally:
+            connection.close()
+
+    def test_bad_invite_codes_get_a_distinct_non_retryable_403_and_leave_no_request(self):
+        request = self.request_value()
+        for code in ('0000-0000-0000-0000', 'short', 5, None, '', 'U' * 16, ['x']):
+            with self.subTest(code=code):
+                self.assertEqual(self.post_request({**request, 'inviteCode': code}), (403, {'error': 'invite_invalid'}, None))
+        missing = {key: value for key, value in request.items() if key != 'inviteCode'}
+        self.assertEqual(self.post_request(missing)[:2], (403, {'error': 'access_denied'}))
+        self.assertEqual(self.post_request(request)[0], 201)
+        with self.store.connect() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0], 1)
+
+    def test_used_up_code_is_invalid_while_capacity_and_conflict_mappings_are_unchanged(self):
+        code = self.store.issue_invite('Single')['code']
+        first = {**self.request_value(), 'inviteCode': code}
+        self.assertEqual(self.post_request(first)[0], 201)
+        status, repeated, _ = self.post_request(first)  # A lost-response retry still reads its status.
+        self.assertEqual((status, repeated['requestId'], repeated['status']), (201, first['requestId'], 'pending'))
+        self.assertEqual(self.post_request({**self.request_value(), 'inviteCode': code}), (403, {'error': 'invite_invalid'}, None))
+        self.assertEqual(self.post_request({**self.request_value(), 'deviceId': first['deviceId']}), (429, {'error': 'rate_limited'}, '60'))
+        self.assertEqual(self.post_request({**first, 'displayName': 'Someone else'}), (409, {'error': 'state_conflict'}, None))
 
     def test_request_activate_status_and_separate_enrollment_over_real_tls(self):
         request = self.request_value()

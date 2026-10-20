@@ -174,7 +174,7 @@ def create_server(access, port=0):
                 self.guard(mutation=True)
                 if self.path == '/session':
                     return self.reply(200, session.exchange(self.body()))
-                if self.path not in {'/dashboard', '/approve', '/replace-key', '/deny', '/revoke', '/session-close'}:
+                if self.path not in {'/dashboard', '/approve', '/replace-key', '/deny', '/revoke', '/session-close', '/invite-issue', '/invite-revoke'}:
                     return self.reply(404, {'error':'not_found'})
                 session.authenticate(self.headers.get('Authorization'), self.headers.get('X-Admin-CSRF'))
                 value = self.body()
@@ -194,6 +194,12 @@ def create_server(access, port=0):
                 elif self.path == '/deny':
                     fields(value, {'requestId'})
                     access.deny(value['requestId']); result = {'ok':True}
+                elif self.path == '/invite-issue':
+                    fields(value, {'label', 'uses', 'days'})
+                    result = access.issue_invite(value['label'], value['uses'], value['days'])
+                elif self.path == '/invite-revoke':
+                    fields(value, {'inviteId'})
+                    access.revoke_invite(value['inviteId']); result = {'ok':True}
                 else:
                     fields(value, {'grantId'})
                     access.revoke(value['grantId']); result = {'ok':True}
