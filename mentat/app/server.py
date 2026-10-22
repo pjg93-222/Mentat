@@ -3348,22 +3348,38 @@ class Handler(access_gate.AccessMixin, BaseHTTPRequestHandler):
                     return self.send(catalogue.rows(role, int(page)))
                 if parsed.path.endswith('/provenance'):
                     return self.send(catalogue.provenance(role))
-                # Open/verify before sending headers; a changed streamed source
-                # closes the connection, never starts a second JSON response.
+                # Finish the reader's full post-hash/identity checks before
+                # any success headers. Retain only bounded immutable chunks.
                 started = False
                 try:
+                    from public_data import MAX_FILE
                     with catalogue.download(role) as (metadata, chunks):
-                        self.send_response(200)
-                        self.send_header('Content-Type', 'text/plain; charset=utf-8')
-                        self.send_header('Content-Length', str(metadata['bytes']))
-                        self.send_header('Content-Disposition', 'attachment; filename="' + metadata['filename'] + '"')
-                        self.send_header('Cache-Control', 'no-store')
-                        self.send_header('X-Content-Type-Options', 'nosniff')
-                        self.send_header('Content-Security-Policy', CONSOLE_CSP)
-                        self.end_headers()
-                        started = True
+                        expected_bytes = metadata['bytes']
+                        if type(expected_bytes) is not int or not 0 <= expected_bytes <= MAX_FILE:
+                            raise ValueError('Public download size is invalid.')
+                        filename = metadata['filename']
+                        buffered, total = [], 0
                         for chunk in chunks:
-                            self.wfile.write(chunk)
+                            if (type(chunk) is not bytes or not 0 < len(chunk) <= 65536
+                                    or total + len(chunk) > expected_bytes
+                                    or len(buffered) >= (expected_bytes + 65535) // 65536):
+                                raise ValueError('Public download bytes changed.')
+                            buffered.append(chunk)
+                            total += len(chunk)
+                        if total != expected_bytes:
+                            raise ValueError('Public download size changed.')
+                        verified_chunks = tuple(buffered)
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                    self.send_header('Content-Length', str(expected_bytes))
+                    self.send_header('Content-Disposition', 'attachment; filename="' + filename + '"')
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.send_header('Content-Security-Policy', CONSOLE_CSP)
+                    self.end_headers()
+                    started = True
+                    for chunk in verified_chunks:
+                        self.wfile.write(chunk)
                 except (ValueError, OSError):
                     if started:
                         self.close_connection = True

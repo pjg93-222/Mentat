@@ -1,5 +1,5 @@
 """Actual passive Console/Handler seam, with generated files only."""
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 import http.client
 import importlib.util
 import io
@@ -54,12 +54,106 @@ class PublicDataHTTPTests(unittest.TestCase):
         self.assertEqual(status,200);self.assertEqual(headers['X-Content-Type-Options'],'nosniff')
         self.assertEqual(headers['Content-Disposition'],'attachment; filename="cm-2022.txt"')
         self.assertEqual(value,(self.root/'source/fec/2022/cm.psv').read_bytes())
+        self.assertEqual(int(headers['Content-Length']),len(value))
 
     def test_ordinary_unavailable_context_does_not_probe_a_source(self):
         self.console.public_data=None
         with patch.object(app.Path,'lstat',side_effect=AssertionError('no source probes')):
             status,_,value=self.request('/api/public-data/catalogue')
         self.assertEqual(status,503);self.assertFalse(value['available'])
+
+    def test_same_size_mutation_after_precheck_never_sends_success_headers(self):
+        source=self.root/'source/fec/2022/cm.psv'
+        original=source.read_bytes();download=self.catalogue.download;statuses=[]
+        send_response=app.Handler.send_response
+        @contextmanager
+        def changed(catalogue,role):
+            self.assertIs(catalogue,self.catalogue)
+            with download(role) as value:
+                # The real reader's initial full hash already passed. Mutate
+                # before iterator consumption and its final context check.
+                source.write_bytes(b'X'+original[1:])
+                yield value
+        def response(handler,status,*args,**kwargs):
+            statuses.append(status)
+            return send_response(handler,status,*args,**kwargs)
+        with patch.object(type(self.catalogue),'download',changed),patch.object(app.Handler,'send_response',response):
+            status,_,value=self.request('/api/public-data/download?table=mentat.fec.cm.2022')
+        self.assertNotEqual(status,200)
+        self.assertNotIn(200,statuses)
+        self.assertIsInstance(value,dict)
+        self.assertIn('error',value)
+        self.assertEqual(source.stat().st_size,len(original))
+
+    def test_success_headers_follow_final_context_verification_and_source_reads(self):
+        events=[];download=self.catalogue.download;send_response=app.Handler.send_response
+        @contextmanager
+        def tracked(catalogue,role):
+            self.assertIs(catalogue,self.catalogue)
+            with download(role) as (metadata,chunks):
+                def source_chunks():
+                    for chunk in chunks:
+                        events.append('source-read')
+                        yield chunk
+                yield metadata,source_chunks()
+            events.append('verified-and-closed')
+        def response(handler,status,*args,**kwargs):
+            if status==200:events.append('success-headers')
+            return send_response(handler,status,*args,**kwargs)
+        with patch.object(type(self.catalogue),'download',tracked),patch.object(app.Handler,'send_response',response):
+            status,headers,value=self.request('/api/public-data/download?table=mentat.fec.cm.2022')
+        self.assertEqual(status,200)
+        self.assertEqual(value,(self.root/'source/fec/2022/cm.psv').read_bytes())
+        self.assertEqual(int(headers['Content-Length']),len(value))
+        self.assertEqual(events[-2:],['verified-and-closed','success-headers'])
+        self.assertTrue(events[:-2])
+        self.assertTrue(all(event=='source-read' for event in events[:-2]))
+
+    def test_after_verified_context_mutation_cannot_change_immutable_response(self):
+        source=self.root/'source/fec/2022/cm.psv';original=source.read_bytes()
+        download=self.catalogue.download;finished=[]
+        @contextmanager
+        def changed_after_verification(catalogue,role):
+            self.assertIs(catalogue,self.catalogue)
+            with download(role) as value:
+                yield value
+            # The real source handle and its final checks have completed.
+            source.write_bytes(b'X'+original[1:])
+            finished.append(True)
+        with patch.object(type(self.catalogue),'download',changed_after_verification):
+            status,headers,value=self.request('/api/public-data/download?table=mentat.fec.cm.2022')
+        self.assertEqual((status,value),(200,original))
+        self.assertEqual(int(headers['Content-Length']),len(original))
+        self.assertEqual(finished,[True])
+        self.assertNotEqual(source.read_bytes(),value)
+
+    def test_declared_bound_total_and_immutable_chunk_types_refuse_before_success(self):
+        import public_data
+        send_response=app.Handler.send_response
+        cases=[(True,[b'x']),(-1,[]),(public_data.MAX_FILE+1,[]),
+               (2,[b'abc']),(3,[b'ab']),(2,[bytearray(b'ab')]),
+               (2,[memoryview(b'ab')]),(0,[b'']),(65537,[b'x'*65537]),(3,[b'a',b'b',b'c'])]
+        for declared,chunks in cases:
+            with self.subTest(declared=declared,chunkType=type(chunks[0]).__name__ if chunks else None):
+                statuses=[]
+                @contextmanager
+                def bounded(catalogue,role):
+                    self.assertIs(catalogue,self.catalogue)
+                    yield {'filename':'cm-2022.txt','bytes':declared},iter(chunks)
+                def response(handler,status,*args,**kwargs):
+                    statuses.append(status)
+                    return send_response(handler,status,*args,**kwargs)
+                with patch.object(type(self.catalogue),'download',bounded),patch.object(app.Handler,'send_response',response):
+                    status,_,value=self.request('/api/public-data/download?table=mentat.fec.cm.2022')
+                self.assertNotEqual(status,200)
+                self.assertNotIn(200,statuses)
+                self.assertIn('error',value)
+
+    def test_actual_empty_download_keeps_exact_zero_length_response(self):
+        fixture(self.root/'source',0)
+        self.catalogue=prepare(self.root/'source');self.console.public_data=self.catalogue
+        status,headers,value=self.request('/api/public-data/download?table=mentat.fec.cm.2022')
+        self.assertEqual((status,value,int(headers['Content-Length'])),(200,b'',0))
 
     def test_unknown_duplicate_and_targeting_parameters_are_refused(self):
         for query in ('table=../private','table=mentat.fec.cm.2022&party=R',
