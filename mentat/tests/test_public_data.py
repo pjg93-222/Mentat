@@ -97,6 +97,49 @@ class PublicDataTests(unittest.TestCase):
         self.assertEqual(proof['document']['sourceUrl'],data.source_url('cm',2022))
         self.assertNotIn(str(self.root),json.dumps(proof))
 
+    def test_buffered_page_keeps_one_full_hash_after_parsing_before_return(self):
+        cat=prepare(self.root);events=[];original_hash=data._hash;original_fields=data._fields
+        def hashed(stream):
+            events.append('full-hash');return original_hash(stream)
+        def fields(raw,table):
+            events.append('buffer-row');return original_fields(raw,table)
+        with patch.object(data,'_hash',hashed),patch.object(data,'_fields',fields):
+            result=cat.rows('mentat.fec.cm.2022')
+        self.assertEqual(len(result['rows']),100)
+        self.assertEqual(events,['buffer-row']*100+['full-hash'])
+
+    def test_failed_buffered_page_posthash_never_returns_and_download_still_preverifies(self):
+        cat=prepare(self.root);entered=False
+        with patch.object(data,'_fields',wraps=data._fields) as fields,patch.object(data,'_hash',return_value='0'*64) as hashed:
+            with self.assertRaises(data.PublicDataError):cat.rows('mentat.fec.cm.2022')
+            self.assertEqual(fields.call_count,100);self.assertEqual(hashed.call_count,1)
+            with self.assertRaises(data.PublicDataError):
+                with cat.download('mentat.fec.cm.2022'):
+                    entered=True
+            self.assertFalse(entered);self.assertEqual(hashed.call_count,2)
+
+    def test_download_retains_full_pre_and_posthash_and_midstream_mutation_refuses(self):
+        cat=prepare(self.root)
+        with patch.object(data,'_hash',wraps=data._hash) as hashed:
+            with cat.download('mentat.fec.cm.2022') as (_meta,chunks):raw=b''.join(chunks)
+            self.assertEqual(hashed.call_count,2)
+        self.assertEqual(raw,(self.root/'fec/2022/cm.psv').read_bytes())
+        path=self.root/'fec/2022/cm.psv';before=path.stat()
+        with self.assertRaises(data.PublicDataError):
+            with cat.download('mentat.fec.cm.2022') as (_meta,chunks):
+                next(chunks);path.write_bytes(b'X'+raw[1:])
+                os.utime(path,ns=(before.st_atime_ns,before.st_mtime_ns))
+
+    def test_buffered_page_selected_file_mutation_is_detected_before_return(self):
+        cat=prepare(self.root);path=self.root/'fec/2022/cm.psv';raw=path.read_bytes();before=path.stat()
+        original=data._fields;changed=False
+        def fields(line,table):
+            nonlocal changed
+            if not changed:
+                changed=True;path.write_bytes(b'X'+raw[1:]);os.utime(path,ns=(before.st_atime_ns,before.st_mtime_ns))
+            return original(line,table)
+        with patch.object(data,'_fields',fields),self.assertRaises(data.PublicDataError):cat.rows('mentat.fec.cm.2022')
+
     def test_unknown_roles_are_lexically_refused_before_any_path_probe(self):
         cat=prepare(self.root)
         with patch.object(Path,'lstat',side_effect=AssertionError('no filesystem probe')):

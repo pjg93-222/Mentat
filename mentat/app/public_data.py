@@ -211,7 +211,9 @@ class Catalogue:
             raise PublicDataError('The public source is unavailable.') from None
 
     @contextmanager
-    def _open(self, table):
+    def _open(self, table, *, preverify=True):
+        if type(preverify) is not bool:
+            raise PublicDataError('The public reader verification mode is invalid.')
         self._unchanged()
         try:
             path=_path(self._root,table.relative)
@@ -220,7 +222,7 @@ class Catalogue:
                 opened=_stamp(os.fstat(stream.fileno()))
                 # Windows 3.12 path and handle ctime have different semantics;
                 # compare shared identity fields, then retain both full stamps.
-                if opened[:-1] != table.identity[:-1] or _hash(stream) != table.sha256:
+                if opened[:-1] != table.identity[:-1] or (preverify and _hash(stream) != table.sha256):
                     raise PublicDataError('The public source checksum or identity changed.')
                 yield stream
                 if _stamp(os.fstat(stream.fileno())) != opened or _hash(stream) != table.sha256:
@@ -252,7 +254,10 @@ class Catalogue:
             raise PublicDataError('Public table page is out of range.')
         start=page*PAGE_SIZE
         rows=[]
-        with self._open(table) as stream:
+        # A page is fully buffered until this context exits. The final complete
+        # hash verifies it before rows can be returned to the HTTP handler.
+        # Streaming downloads keep the default full hash before their yield.
+        with self._open(table, preverify=False) as stream:
             block=start//STRIDE
             stream.seek(table.offsets[block] if table.offsets else 0)
             for _ in range(start-block*STRIDE):
