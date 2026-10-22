@@ -17,6 +17,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   artifact-authority-and-payload:
+    permissions:
+      contents: write
     name: Release authority and payload (native trust not assessed)
     runs-on: windows-2022
     timeout-minutes: 60
