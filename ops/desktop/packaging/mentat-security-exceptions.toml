@@ -1,0 +1,16 @@
+# Mentat's security-gate exceptions, in ops/security/exceptions.toml's format. release_from_main.py appends this file to a
+# copy of --security-root's ops/security/exceptions.toml for the mentat gate only (<app>-security-exceptions.toml).
+# Owner ruling 2026-10-25 "Allow it (Recommended)": the gate scans the staged sources Mentat installs
+# (build_runtime.py --stage-only, <build-root>/mentat/<id>/sources); the path below is inside that tree. The entry excuses
+# one shipped file's denied extension only: a size, PII or canary finding on the same file still fails. Decision D-293.
+
+[[exception]]
+id = "MENTAT-001"
+stage = "export"
+check = "data_leak"
+match = "mentat/app/template.csv: denied extension .csv"
+reason = "Shipped Mentat sample alias template (4 lines, fictional names) served at /template.csv by mentat/app/server.py, not data; owner ruling 2026-10-25 \"Allow it (Recommended)\"."
+approver = "Paul"
+expires = "2026-11-24"
+decision = "D-293"
+severity = "HIGH"
