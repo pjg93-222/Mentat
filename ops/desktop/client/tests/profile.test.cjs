@@ -162,3 +162,17 @@ test('isolated runtime refuses data roots outside the tree before creating direc
   const count=seen.length;
   await assert.rejects(new Runtime('mentat',plan.directory,resources,{authorize}).start({dataDirectory:target}),/runtime is not installed/);assert.equal(seen.length,count);
 });
+
+test('an isolated profile inside the Downloads install root is refused; elsewhere under Downloads is not',t=>{
+  const {home,appData,options}=sandbox(t),downloads=path.join(home,'Downloads');
+  const withDownloads={...options,downloads:()=>downloads};
+  for(const inside of [path.join(downloads,'MelangeApplications'),path.join(downloads,'MelangeApplications','Mentat-1.0.19'),path.join(downloads,'MelangeApplications','updates','x')])
+    assert.throws(()=>selectStartupProfile({...withDownloads,appId:'mentat',argv:['--melange-isolated-profile='+inside],packaged:true}),
+      error=>error.code==='ISOLATED_PROFILE_REFUSED'&&error.message.includes(path.join(downloads,'MelangeApplications')),inside);
+  // A parent of the install root would also contain it.
+  assert.throws(()=>selectStartupProfile({...withDownloads,appId:'mentat',argv:['--melange-isolated-profile='+downloads],packaged:true}),error=>error.code==='ISOLATED_PROFILE_REFUSED');
+  const outside=path.join(home,'accept','profile');
+  assert.equal(selectStartupProfile({...withDownloads,appId:'mentat',argv:['--melange-isolated-profile='+outside],packaged:true}).isolated,true);
+  // Without a downloads option nothing else changes (legacy call shape).
+  assert.equal(selectStartupProfile({...options,appId:'mentat',argv:['--melange-isolated-profile='+path.join(home,'accept2')],packaged:true}).isolated,true);
+});

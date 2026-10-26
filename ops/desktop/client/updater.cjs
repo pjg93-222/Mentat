@@ -6,6 +6,7 @@ const crypto=require('node:crypto');
 const semver=require('semver');
 const {verifyWindowsPackage}=require('./native-signature.cjs');
 const {jsonRequest,verifyEnvelope,applyKeyTransitions,downloadVerified,verifyPackageFile}=require('./trust.cjs');
+const {LAYOUT}=require('./install-layout.cjs');
 const VERIFY_RETRY_MS=6*60*60*1000;
 // Launch-time installs wait for the signature tool (up to 20 s). After this many 'no verdict' starts for the same
 // staged release, launch install is skipped and the update installs when the app closes instead.
@@ -36,6 +37,12 @@ class DesktopUpdater {
     this.autoUpdater.autoDownload=false;this.autoUpdater.autoInstallOnAppQuit=false;
     this.autoUpdater.allowDowngrade=false;this.autoUpdater.disableDifferentialDownload=true;
     this.autoUpdater.disableWebInstaller=true;
+    // Downloads layout only (installLayout is null on the legacy path): electron-updater 6.8.9 reuses a preset helper
+    // (AppUpdater.getOrCreateDownloadHelper), so the installer it will run is cached under <Downloads>\MelangeApplications\updates.
+    if(this.installLayout){
+      const {DownloadedUpdateHelper}=require('electron-updater/out/DownloadedUpdateHelper');
+      this.autoUpdater.downloadedUpdateHelper=new DownloadedUpdateHelper(this.installLayout.cacheDirectory);
+    }
   }
   identity(){return {appId:this.appId,version:this.version,platform:this.platform,arch:this.arch};}
   packagePath(manifest){return path.join(this.userData,'updates',String(manifest.sequence),manifest.package.name);}
@@ -91,6 +98,8 @@ class DesktopUpdater {
     return candidate;
   }
   verifyRecovery(enrollment,recovery){
+    if(this.installLayout){const floor=this.installLayout.rollbackFloor||LAYOUT.rollbackFloor;
+      if(semver.valid(recovery.target.version)&&semver.lt(recovery.target.version,floor))throw new Error('Rollback below '+floor+' would leave the Downloads layout');}
     // The only downgrade exception is this exact, locally selected, previously installed envelope.
     const expected=crypto.createHash('sha256').update(Buffer.from(recovery.target.envelope.payload,'base64')).digest('hex');
     if(expected!==recovery.manifestHash)throw new Error('Recovery authorization changed');
@@ -298,7 +307,11 @@ class DesktopUpdater {
     }catch(error){this.onStatus(this.ready?'Update check deferred. Verified update remains staged; local app remains available.':'Update deferred: '+error.message);
     }finally{this.busy=false;}
   }
-  markApplicationReady(){this.applicationReady=true;}
+  markApplicationReady(){
+    this.applicationReady=true;
+    // Keep-2 pruning and the old program-folder cleanup run once per session, after a good start; they never block it.
+    if(this.installLayout&&!this.layoutSwept){this.layoutSwept=true;try{Promise.resolve(this.installLayout.sweep(this.readState())).catch(()=>{});}catch{}}
+  }
   async markApplicationFailed(){
     this.applicationReady=false;this.ready=null;
     const state=this.readState();
@@ -370,6 +383,7 @@ class DesktopUpdater {
       // marks the transaction failed with INSTALL_FAILED.
       const run=Boolean(typeof relaunch==='function'?relaunch():relaunch);
       this.autoUpdater.autoRunAppAfterInstall=run;
+      // Downloads layout: no /D= here. The installer finds its folder from where it runs (the pending cache under the Downloads root); Node quotes a /D= value with a space and NSIS then ignores it.
       this.autoUpdater.quitAndInstall(true,run);
       if(this.autoUpdater.quitAndInstallCalled===false)throw new Error('The installer could not be started.');
       return true;

@@ -45,3 +45,45 @@ test('an unreadable directory under sources is logged and skipped; the rest is s
   assert.equal(context.exists('mentat/sources/app/b.db'),false,'the readable branch is still stripped');
   assert.ok(lines.some(line=>/could not read .*locked: EACCES/.test(line)),'the unreadable directory is logged');
 });
+
+// Downloads layout: afterPack writes the generated NSIS include and is the build-time long-path gate.
+const layout=require('../install-layout.cjs');
+function packaged(t,{depth=''}={}){
+  const output=fs.mkdtempSync(path.join(os.tmpdir(),'after-pack-out-'));t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
+  const appOutDir=path.join(output,'win-unpacked');fs.mkdirSync(path.join(appOutDir,'resources'),{recursive:true});
+  fs.writeFileSync(path.join(appOutDir,'Mentat.exe'),'x');
+  if(depth){const target=path.join(appOutDir,depth);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,'x');}
+  const packager={appInfo:{productName:'Mentat',version:'1.0.19'},config:{extraMetadata:{desktopAppConfig:{appId:'mentat'}}}};
+  return {output,appOutDir,packager,context:{appOutDir,packager}};
+}
+
+test('afterPack writes installer.generated.nsh beside win-unpacked, from the one config point',async t=>{
+  const p=packaged(t);await quiet(p.context);
+  const file=path.join(p.output,'installer.generated.nsh'),text=fs.readFileSync(file,'utf8');
+  assert.equal(text,layout.nsisInclude({product:'Mentat',app:'mentat',version:'1.0.19',installerNsh:path.join(__dirname,'..','installer.nsh')}));
+  assert.match(text,/!define DL_APP_FOLDER "Mentat-1\.0\.19"/);assert.match(text,/!define DL_SETUP_FOLDER "mentat-1\.0\.19-setup"/);assert.match(text,/!define DL_CACHE_FOLDER "mentat"/);
+  assert.ok(fs.existsSync(path.join(__dirname,'..','installer.nsh')),'the included installer.nsh exists');
+});
+
+test('afterPack throws when the packed tree is deeper than the budget, and logs the depth when it is not',async t=>{
+  const within=packaged(t,{depth:'a'.repeat(layout.LAYOUT.deepestRelativeBudget)});
+  const lines=await quiet(within.context);assert.ok(lines.some(line=>/\[after-pack\] deepest relative path: 150 \(budget 150\)/.test(line)),lines.join('\n'));
+  const over=packaged(t,{depth:'a'.repeat(layout.LAYOUT.deepestRelativeBudget+1)});
+  await assert.rejects(()=>quiet(over.context),/deepest relative path is 151 characters, over the 150 budget/);
+  assert.equal(fs.existsSync(path.join(over.output,'installer.generated.nsh')),false,'no include is written for a tree that fails the gate');
+});
+
+test('afterPack still strips state while gating, and a context without a packager only gates',async t=>{
+  const p=packaged(t);fs.mkdirSync(path.join(p.appOutDir,'resources','runtime','mentat','sources','a','state'),{recursive:true});
+  fs.writeFileSync(path.join(p.appOutDir,'resources','runtime','mentat','sources','a','state','x.txt'),'x');
+  await quiet(p.context);assert.equal(fs.existsSync(path.join(p.appOutDir,'resources','runtime','mentat','sources','a','state')),false);
+  const bare=packaged(t);await quiet({appOutDir:bare.appOutDir});assert.equal(fs.existsSync(path.join(bare.output,'installer.generated.nsh')),false);
+});
+
+test('builder points nsis.include at the generated file, forbids changing the folder, and writes nothing itself',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','builder.cjs'),'utf8');
+  assert.match(source,/allowToChangeInstallationDirectory:false/);assert.doesNotMatch(source,/allowToChangeInstallationDirectory:true/);
+  assert.match(source,/include:path\.join\(outputDirectory,'installer\.generated\.nsh'\)/);
+  assert.match(source,/oneClick:false,perMachine:false/);
+  assert.doesNotMatch(source,/writeFileSync/);
+});
