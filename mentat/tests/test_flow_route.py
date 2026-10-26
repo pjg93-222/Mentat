@@ -1356,7 +1356,7 @@ class CandidateNames(unittest.TestCase):
         self.assertEqual(missing['outcome:support:D'], 1000000.0, 'not in cn24: the first filing answers')
         self.assertEqual(sum(missing.values()), sum(placed.values()))
         self.assertEqual([note['text'] for note in body['notes'] if note['key'] == 'party_from_filing'],
-                         [f"1 candidate's party taken from the filing: not in the {flow_data.cycle_label('2024')} FEC candidate master"])
+                         [f"1 candidate's party taken from the filing: the {flow_data.cycle_label('2024')} FEC candidate master gives none"])
 
     def test_the_master_places_the_node_and_the_mixed_filing_is_disclosed(self):
         body = self.flow(self.master('SMITH, ANNABELLE ROSE'))

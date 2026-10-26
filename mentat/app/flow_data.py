@@ -2563,8 +2563,8 @@ def industry_payload(label, cycle, paths, *, basis='reported', top=DEFAULT_TOP, 
     if built.get('party_from_filing'):
         count = len(built['party_from_filing'])
         whose = "1 candidate's" if count == 1 else f"{count} candidates'"
-        notes.append({'key': 'party_from_filing', 'text': f"{whose} party taken from the filing: not in the "
-                                                           f"{cycle_label(built['cycle'])} FEC candidate master"})
+        notes.append({'key': 'party_from_filing', 'text': f"{whose} party taken from the filing: the "
+                                                           f"{cycle_label(built['cycle'])} FEC candidate master gives none"})
     notes.extend(carry_notes(built['found'], built['cycle']))
     notes.extend(refund_notes(built['ledgers'], None, built['label'], built['drawn']))
     for direct, who in ((True, 'candidates'), (False, 'other recipients')):

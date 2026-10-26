@@ -1413,7 +1413,7 @@ def _graph_view(paths, filters):
     filed_party = sorted({row['candidate_id'] for row in candidate_rows if row.get('party_source') == 'filing'})
     if available and filed_party:
         said = (f"Party for {len(filed_party)} candidate{'s' if len(filed_party) != 1 else ''} is taken from the "
-                "filing: not in that cycle's FEC candidate master.")
+                "filing: that cycle's FEC candidate master gives none.")
         tail = (trace or {}).get('note') or ''       # the trace sentence stays last (Graph's not-traced contract)
         note = (note[:-len(tail)].rstrip() + ' ' + said + ' ' + tail) if tail and note.endswith(tail) else note + ' ' + said
     side_groups = ({name:candidate_groups(rows) for name,rows in buckets.items()}

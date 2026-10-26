@@ -431,6 +431,8 @@
     return [who, note.amount == null ? '' : full(note.amount), note.date].filter(Boolean).join(', ');
   }
   const plural = (count, one, many) => (count === 1 ? one : many);
+  // D-343: a candidate's party is the cycle's FEC candidate master's; when it gives none, the filed party is shown.
+  const PARTY_AS_FILED = 'Party as filed: this cycle\'s FEC candidate master gives none';
   function nodeWarning(node, full) {
     const notes = node.cross_candidate_filings || [];
     if (!notes.length) return '';
@@ -507,6 +509,7 @@
       for (const line of link.details || []) lines.push(line);
       if (link.date_unverified) lines.push('Undated in the filing: counted, date not verified');
       const crossed = linkWarning(link, full);
+      if (sink.party_source === 'filing') lines.push(PARTY_AS_FILED);   // the ribbon names the same candidate
       if (source.stub && source.carryover) lines.push(`Carried over: ${source.carryover}`);
       const record = (link.evidence || []).find(item => fec(item.source_url));
       const url = record ? fec(record.source_url) : fec(link.evidence_url || '');
@@ -520,7 +523,7 @@
     if (column && column.total && !node.stub) lines.push(`${percent(node.value / column.total)} of ${column.label || 'this stage'}`);
     if (node.pooled && (node.share_from_upstream || []).length) lines.push(shares(node, cycle));
     // D-343: party comes from the FEC candidate master of the cycle; when that file lacks the ID, say whose word it is.
-    if (node.party_source === 'filing') lines.push('Party as filed: not in this cycle\'s FEC candidate master');
+    if (node.party_source === 'filing') lines.push(PARTY_AS_FILED);
     if (node.balance === 'unspent') lines.push(`cash on hand ${full(node.cash || 0)} at the end of the window`
       + ((node.held || 0) > 0 ? ` + ${heldWords(node.held_kinds)} ${full(node.held)} still held` : ''));
     if (node.bucket === 'small') {
