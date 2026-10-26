@@ -256,6 +256,14 @@ def name_words(name):
     return {word for word in letters + [a + b for a, b in zip(letters, letters[1:])] if len(word) >= 3}
 
 
+def same_person(a, b):
+    """Two filed names agree when the surname part (before the comma) of either shares a word with the other name:
+    a shared given name alone ('SMITH, JAMES' and 'JOHNSON, JAMES') is not agreement; a married or compound name
+    ('HINSON, ASHLEY' and 'ARENHOLZ, ASHLEY HINSON') is."""
+    a, b = str(a or ''), str(b or '')
+    return bool(name_words(a.partition(',')[0]) & name_words(b) or name_words(b.partition(',')[0]) & name_words(a))
+
+
 def named_candidate_id(masters, cycle, name, office, state):
     """The one FEC candidate-master ID whose surname shares a word with the filed name's surname (the part before
     the comma), whose office letter (H, S, P) is `office` and whose office state is `state`; '' when none or more than
@@ -831,7 +839,7 @@ def committee_flow(committee, cycle, *, identifier='', depth=DEFAULT_DEPTH, root
         when no filed spelling agrees with it or none was filed."""
         rows = voters(candidate)
         if master:
-            agreeing = [row for row in rows if name_words(row[0]) & name_words(master)]
+            agreeing = [row for row in rows if same_person(row[0], master)]
             if not agreeing:
                 return master, True
             surname = name_words(master.partition(',')[0])
@@ -1073,11 +1081,10 @@ def committee_flow(committee, cycle, *, identifier='', depth=DEFAULT_DEPTH, root
     # stays on the node FEC filed it under; this is a note about the filing, listed and counted, and moves nothing.
     for node_id, records in drawn_filings.items():
         target = graph.nodes[node_id]
-        shown = name_words(target['name_as_filed'])
         notes, seen = [], set()
         for record in records:
             sub_id = record['sub_id']
-            if sub_id in seen or sub_id not in filed_name or name_words(filed_name[sub_id]) & shown:
+            if sub_id in seen or sub_id not in filed_name or same_person(filed_name[sub_id], target['name_as_filed']):
                 continue
             seen.add(sub_id)
             filer, raw = filed_row[sub_id]
@@ -1718,9 +1725,19 @@ def _prepared(key, prepare):
                     del _preparing[key]
 
 
+def _candidate_master_stamps():
+    """The cn*/cn.txt files candidate_master reads, so a changed or added candidate master is read again."""
+    import evidence_csv
+    base = Path(CANDIDATE_MASTER_ROOT) if CANDIDATE_MASTER_ROOT else evidence_csv.INPUTS / 'fec_beneficiary'
+    try:
+        return tuple(_stamp(path) for path in sorted(base.glob('cn*/cn.txt')))
+    except OSError:
+        return ()
+
+
 def _key(root, identifier, committee, cycle, depth):
     return (_inventory_stamps(root), _stamp(_snapshot_path(root, identifier)), _facts_stamp(root, identifier),
-            committee, str(cycle), depth)
+            _candidate_master_stamps(), committee, str(cycle), depth)
 
 
 def committee_payload(committee, cycle, *, identifier='', basis='reported', top=DEFAULT_TOP, depth=DEFAULT_DEPTH,

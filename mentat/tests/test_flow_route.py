@@ -1215,6 +1215,16 @@ class CandidateNames(unittest.TestCase):
         only = by_id(self.flow(self.master('ARENHOLZ, ASHLEY HINSON'), rows=rows[:1]))[self.NODE]
         self.assertEqual((only['name_as_filed'], 'cross_candidate_filings' in only), ('HINSON, ASHLEY', False))
 
+    def test_a_shared_given_name_is_not_agreement_with_the_master(self):
+        """'JOHNSON, ANN' filed under SMITH, ANN's ID shares only the given name: the master labels the node and the
+        filing is disclosed as naming another candidate."""
+        body = self.flow(self.master('SMITH, ANN'), rows=(('k1', 'JOHNSON, ANN', 'XX', 2500.0),))
+        node = by_id(body)[self.NODE]
+        self.assertEqual((node['label'], node['name_as_filed'], node['name_master']), ('Ann Smith', 'SMITH, ANN', '2024'))
+        self.assertEqual([item['named_recipient'] for item in node['cross_candidate_filings']], ['JOHNSON, ANN'])
+        self.assertFalse(flow_data.same_person('SMITH, JAMES', 'JOHNSON, JAMES'))
+        self.assertTrue(flow_data.same_person('HINSON, ASHLEY', 'ARENHOLZ, ASHLEY HINSON'))
+
     def test_without_a_master_the_rows_filed_in_the_ids_own_state_name_the_node(self):
         """Same name length and one vote each: today's alphabetical tie-break gives ZEDDY here."""
         reference = self.flow(self.master('SMITH, ANN'))
