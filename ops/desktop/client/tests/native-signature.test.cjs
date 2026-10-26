@@ -26,6 +26,18 @@ test('T18 (D-328): with enforcement on, the signer must equal the client-pinned 
   for(const status of [2,3])assert.throws(()=>verifySignatureResult({...signed(PIN),status},filename,[PIN],on),/could not be verified/);
   assert.throws(()=>verifySignatureResult({...signed(PIN),path:'C:\Other\Package.exe'},filename,[PIN],on),/could not be verified/);
 });
+test('LAUNCH F5: enforced, an untrusted chain is accepted on the pinned thumbprint alone; a wrong thumbprint is refused; the signature must stay intact',()=>{
+  // Staff PCs without our root in Trusted Root report UnknownError (1) or NotTrusted (4) for a correctly signed installer.
+  const filename='C:\\Test\\Package.exe',on={enforce:true},result=(status,thumbprint)=>({status,thumbprint,path:filename});
+  for(const status of [1,4]){
+    verifySignatureResult(result(status,PIN),filename,[PIN],on);
+    verifySignatureResult(result(status,PIN.toLowerCase()),filename,[PIN,OTHER],on);
+    for(const pins of [[PIN],[PIN,OTHER]])
+      assert.throws(()=>verifySignatureResult(result(status,OTHER),filename,pins,on),/could not be verified/,'wrong thumbprint, status '+status);
+  }
+  // NotSigned / HashMismatch: no intact signature, refused even with the pinned thumbprint.
+  for(const status of [2,3])assert.throws(()=>verifySignatureResult(result(status,PIN),filename,[PIN],on),/could not be verified/);
+});
 test('T18 (Paul 2026-10-26): the shipped default is warn-only for 1.0.19 (flip PUBLISHER_PIN_ENFORCE in the next release)',()=>{
   assert.equal(PUBLISHER_PIN_ENFORCE,false);
 });
