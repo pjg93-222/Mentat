@@ -103,6 +103,7 @@ class Reader(cs.Base):
         return state
 
     def read(self, **query):
+        query.setdefault('ccl_root', self.root / 'no-ccl')    # hermetic: never the machine's active FEC source
         return reader.read_campaign_spending(state_dir=self.state, **query)
 
     def committee(self, committee, cycle=2024):
@@ -260,6 +261,72 @@ class Reader(cs.Base):
         self.assertEqual(entry['rows'], ROWS[C1])
         self.assertIsNotNone(entry['retrieved_at']['B_latest'])
         self.assertIsNone(entry['retrieved_at']['totals'])
+
+    # ------------------------------------------------------------ no stored mapping: the active source's ccl, read at request time
+    def without_map_table(self):
+        shutil.rmtree(self.state / 'accepted-batches' / 'batch-02')       # batch-01 has no candidate_committee_map table
+
+    def ccl_listing(self, folder):
+        return {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in sorted(folder.iterdir())}
+
+    def test_no_stored_mapping_reads_the_active_ccl_and_labels_it(self):
+        self.without_map_table()
+        result = self.read(cycle=2024, candidate_id='H0AA00001', ccl_root=self.root)
+        sha = hashlib.sha256((self.root / 'ccl24' / 'ccl.txt').read_bytes()).hexdigest()
+        self.assertEqual(result['mapping'], {'candidate_id': 'H0AA00001', 'vintage_or_retrieved_at': 'Mon, 07 Sep 2026 05:51:23 GMT',
+                                             'source': 'local_ccl_read_time:%s/ccl24/ccl.txt:sha256=%s' % (self.root.name, sha), 'committee_ids': [C1]})
+        self.assertEqual(result['snapshot']['batch'], 1)
+        entry = result['committees'][0]
+        self.assertEqual((entry['committee_id'], entry['coverage_status']), (C1, 'partial'))
+        self.assertEqual(entry['rows'], ROWS[C1])
+        self.validate(result)
+
+    def test_ccl_vintage_falls_back_to_the_file_mtime_without_a_source_receipt(self):
+        self.without_map_table()
+        (self.root / 'ccl24' / 'source-receipt.json').unlink()
+        mapping = self.read(cycle=2024, candidate_id='H0AA00001', ccl_root=self.root)['mapping']
+        self.assertTrue(mapping['vintage_or_retrieved_at'].startswith('file_mtime_utc:'), mapping)
+        self.assertEqual(mapping['vintage_or_retrieved_at'], driver.ccl_vintage(self.root / 'ccl24' / 'ccl.txt'))
+
+    def test_a_stored_mapping_always_wins_over_the_ccl(self):
+        other = self.root / 'other'
+        (other / 'ccl24').mkdir(parents=True)
+        (other / 'ccl24' / 'ccl.txt').write_text('H0AA00002|2024|2024|%s|H|P|9\n' % C1, encoding='utf-8')
+        result = self.read(cycle=2024, candidate_id='H0AA00002', ccl_root=other)
+        self.assertTrue(result['mapping']['source'].startswith('local_ccl:ccl.txt:sha256='), result['mapping'])
+        self.assertEqual(result['mapping']['committee_ids'], [C2, C5])
+
+    def test_ccl_filter_is_the_collectors_rule(self):
+        self.without_map_table()
+        path = self.ccl(['H0AA00001|2024|2024|%s|H|P|1' % C1,
+                         'H0AA00001|2024|2024|%s|H|A|2' % C2,              # authorized, not principal
+                         'H0AA00001|2022|2022|%s|H|P|3' % C3,              # another FEC election year
+                         'H0AA00001|2024|2024|C00BAD|H|P|4',               # not a committee id
+                         'H0AA00003|2024|2024|%s|H|P|5' % C5,              # another candidate
+                         'H0AA00001|2022|2024|%s|H|P|6' % C6,              # the cycle is FEC_ELECTION_YR, not CAND_ELECTION_YR
+                         'H0AA00001|2024|2024|%s|H|P' % C4])               # short line
+        expected = sorted(driver.principal_committees_from_ccl(path, 2024, {'H0AA00001'})[0]['H0AA00001'])
+        self.assertEqual(expected, [C1, C6])
+        self.assertEqual(self.read(cycle=2024, candidate_id='H0AA00001', ccl_root=self.root)['mapping']['committee_ids'], expected)
+        self.assertEqual(self.read(cycle=2024, candidate_id='H0AA00003', ccl_root=self.root)['mapping']['committee_ids'], [C5])
+
+    def test_missing_or_unusable_ccl_leaves_the_mapping_unknown(self):
+        self.without_map_table()
+        (self.root / 'ccl22' / 'ccl.txt').mkdir(parents=True)                # unreadable: a folder where the file should be
+        for query, root in ((dict(cycle=2024, candidate_id='H0AA00001'), self.root / 'no-ccl'),        # no ccl at all
+                            (dict(cycle=2024, candidate_id='H0AA00009'), self.root),                    # no principal row for this candidate
+                            (dict(cycle=2022, candidate_id='H0AA00001'), self.root)):                   # ccl22 cannot be read
+            with self.subTest(query=query):
+                result = self.read(ccl_root=root, **query)
+                self.assertIsNone(result['mapping'])
+                self.assertEqual([c['coverage_status'] for c in result['committees']], ['mapping_unknown'])
+                self.validate(result)
+
+    def test_reading_the_ccl_never_changes_it(self):
+        self.without_map_table()
+        before = self.ccl_listing(self.root / 'ccl24')
+        self.read(cycle=2024, candidate_id='H0AA00001', ccl_root=self.root)
+        self.assertEqual(self.ccl_listing(self.root / 'ccl24'), before)
 
     # ------------------------------------------------------------ archives are verified, never guessed
     def body_of(self, committee):
