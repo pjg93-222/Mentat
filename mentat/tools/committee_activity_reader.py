@@ -16,17 +16,25 @@ payment relationship. This reader returns Schedule B rows and totals only and ne
 consumer that reads origins (schema 2 `origins` rows, or schema 3 `origin_catalog` + `origin_seeds` + the derived closure) must drop every origin
 with giving_or_payment_evidence is False (test `is False`: older origins do not carry the key) before any giving, receipt, per-company, per-industry
 or per-donor view, count or denominator. A unit whose only origins are hint-tagged is discovery-only, never covered, collected or zero.
+
+MAPPING WITHOUT A STORED TABLE. Accepted snapshots are sha-bound and may hold no candidate_committee_map. For such a candidate the reader reads the
+active FEC source's linkage file (inputs/active_fec_sources.json path + /fec_beneficiary/ccl<yy>/ccl.txt) when the request is made, by the same rule
+as the collector's set_priority (D072, collect_committee_activity.py principal_committees_from_ccl): FEC election year equals the cycle, designation
+P, a well-formed committee id. The result is labelled local_ccl_read_time with the file path, its sha256 and its vintage, and is never stored: the
+snapshot, the archives and the linkage file are only read. A stored mapping always wins; with neither, the mapping is unknown.
 """
 import hashlib
 import json
 import re
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_STATE = Path(__file__).resolve().parents[1] / 'state' / 'committee-activity'
 COMMITTEE = re.compile(r'C[0-9]{8}')
 CANDIDATE = re.compile(r'[HSP][A-Z0-9]{8}')
 _SHA = {}
+_CCL = {}
 
 
 class SnapshotUnavailable(RuntimeError):
@@ -166,7 +174,46 @@ def _mapping(db, candidate, cycle):
             'committee_ids': [row['committee_id'] for row in found]}
 
 
-def read_campaign_spending(*, cycle, candidate_id=None, committee_id=None, state_dir=None):
+def _active_ccl_root():
+    try:  # resolved per request, never at import: the pointer is machine-local and may be absent
+        active = json.loads((Path(__file__).resolve().parents[1] / 'inputs' / 'active_fec_sources.json').read_text(encoding='utf-8'))
+        return Path(active['path']) / 'fec_beneficiary'
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _ccl_mapping(candidate, cycle, ccl_root=None):
+    root = Path(ccl_root) if ccl_root is not None else _active_ccl_root()
+    if root is None:
+        return None
+    path = root / ('ccl%02d' % (cycle % 100)) / 'ccl.txt'
+    try:
+        stat = path.stat()
+        key = (str(path), stat.st_size, stat.st_mtime_ns, cycle)
+        if key not in _CCL:
+            principal = {}
+            for line in path.read_bytes().decode('utf-8', 'replace').splitlines():
+                part = line.strip().split('|')   # CAND_ID|CAND_ELECTION_YR|FEC_ELECTION_YR|CMTE_ID|CMTE_TP|CMTE_DSGN|LINKAGE_ID
+                if len(part) >= 7 and part[2] == str(cycle) and part[5] == 'P' and COMMITTEE.fullmatch(part[3]):
+                    principal.setdefault(part[0], set()).add(part[3])
+            _CCL[key] = {name: sorted(ids) for name, ids in principal.items()}
+        sha = _file_sha(path)
+    except OSError:
+        return None
+    ids = _CCL[key].get(candidate)
+    if not ids:
+        return None
+    try:
+        vintage = json.loads(path.with_name('source-receipt.json').read_text(encoding='utf-8')).get('last_modified')
+    except (OSError, ValueError, AttributeError):
+        vintage = None
+    if not (isinstance(vintage, str) and vintage):
+        vintage = 'file_mtime_utc:' + datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat()
+    return {'candidate_id': candidate, 'source': 'local_ccl_read_time:' + '/'.join(path.parts[-3:]) + ':sha256=' + sha,
+            'vintage_or_retrieved_at': vintage, 'committee_ids': ids}
+
+
+def read_campaign_spending(*, cycle, candidate_id=None, committee_id=None, state_dir=None, ccl_root=None):
     """Campaign spending for one candidate's principal committees, or for one committee, from the newest accepted snapshot."""
     if type(cycle) is not int:
         raise TypeError('cycle must be an int')
@@ -181,7 +228,7 @@ def read_campaign_spending(*, cycle, candidate_id=None, committee_id=None, state
     db = sqlite3.connect(path.as_uri() + '?mode=ro&immutable=1', uri=True)
     db.row_factory = sqlite3.Row
     try:
-        mapping = _mapping(db, candidate_id, cycle) if candidate_id is not None else None
+        mapping = (_mapping(db, candidate_id, cycle) or _ccl_mapping(candidate_id, cycle, ccl_root)) if candidate_id is not None else None
         if committee_id is not None:
             if mapping is not None and committee_id not in mapping['committee_ids']:
                 raise ValueError('committee_id is not a stored principal committee of candidate_id for this cycle')
