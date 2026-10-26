@@ -9,7 +9,9 @@ const LAYOUT=Object.freeze({
   appFolder:'{product}-{version}',           // <root>\Mentat-1.0.19 (folder name carries 1.x)
   updatesName:'updates',                     // <root>\updates
   updaterCacheFolder:'{app}',                // <root>\updates\mentat\pending\mentat-1.0.20-win32-x64.exe
-  setupFolder:'{app}-{version}-setup',       // <root>\updates\mentat-1.0.19-setup\nsXXXX.tmp (NSIS $TEMP)
+  setupFolder:'{app}-setup',                 // <root>\updates\mentat-setup\nsXXXX.tmp (NSIS $TEMP). No version: 7 more characters of
+                                             // user name fit under DL_MAX_SETUP (LAUNCH F2); only one setup folder is ever live
+  legacySetupFolder:'{app}-{version}-setup', // the 1.0.19 name; the sweep removes these leftovers
   keepVersions:2,                            // leftover sweep keeps the current + one more; the update's own uninstall already removes the previous folder (rollback reinstalls from the stored installer)
   rollbackFloor:'1.0.19',                    // D-5: first Downloads release
   downloadsKnownFolder:'{374DE290-123F-4565-9164-39C4925E467B}',
@@ -160,10 +162,10 @@ async function sweep(options){
   }catch(error){log('Layout version pruning skipped: '+error.message);}
   try{
     const updates=updatesDirectory(downloads),entries=await fs.promises.readdir(updates);
-    const pattern=new RegExp('^'+escape(fill(LAYOUT.setupFolder,{app,version:'@@'})).replace('@@','(\\d+\\.\\d+\\.\\d+)')+'$');
-    const live=new Set([current,state.pending?.version].filter(Boolean));
+    const pattern=new RegExp('^(?:'+[LAYOUT.setupFolder,LAYOUT.legacySetupFolder].map(template=>escape(fill(template,{app,version:'@@'})).replace('@@','\\d+\\.\\d+\\.\\d+')).join('|')+')$');
+    const live=new Set([current,state.pending?.version].filter(Boolean).map(version=>fill(LAYOUT.setupFolder,{app,version})));
     for(const name of entries){
-      const match=pattern.exec(name);if(!match||live.has(match[1]))continue;
+      if(!pattern.test(name)||live.has(name))continue;
       const target=path.join(updates,name);
       if(await removeDirectory(fs,target,guard,log,'finished installer scratch folder'))result.pruned.push(target);
     }
