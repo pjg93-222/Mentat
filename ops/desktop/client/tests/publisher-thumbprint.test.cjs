@@ -104,6 +104,12 @@ test('a legacy manifest without publisherThumbprints is refused at activation (f
   assert.equal(signatureCalls,0,'refused before the signature tool runs');
 });
 
+test('warn-only (enforce off) still refuses a legacy manifest without publisherThumbprints',async t=>{
+  const f=fixture(t,{thumbprints:null,enforce:false});
+  await refusedAndStillRunning(f,f.client(),/names no publisher thumbprint/);
+  assert.equal(signatureCalls,0,'refused before the signature tool runs');
+});
+
 test('a staged update whose signer no longer verifies is refused at launch and the current version starts normally',async t=>{
   const f=fixture(t);await f.client().check();assert.equal(f.state.pending.phase,'prepared');
   signer={status:2,thumbprint:null};const restarted=f.client();

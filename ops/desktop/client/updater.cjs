@@ -82,7 +82,9 @@ class DesktopUpdater {
     const warn=message=>{if(this.publisherWarned.has(message))return;this.publisherWarned.add(message);this.onStatus(message);};
     try{await this.verifyNativePackage(filename,manifest.publisherThumbprints,{enforce:this.enforcePublisher,warn});}
     catch(error){
-      if(this.enforcePublisher)throw error;
+      // A signed manifest with no allow-list stays refused even while the native checks are warn-only (1.0.19); trust.cjs
+      // already refuses an empty or malformed list, so a missing one is the only case left here.
+      if(this.enforcePublisher||manifest.publisherThumbprints===undefined)throw error;
       const message='Update publisher warning: the native publisher check did not pass ('+error.message+'). This release still installs; the next release will refuse it.';
       if(!this.publisherWarned.has(message))console.warn(message);warn(message);
     }

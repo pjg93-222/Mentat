@@ -21,7 +21,8 @@ function signatureTimeoutMs(bytes){
 }
 // D-328/T18: the client pin is the publisher; the signed manifest may only confirm it, never widen it. Paul ruling
 // 2026-10-26: that NEW pin check is warn-only for 1.0.19 (a mismatch is logged and surfaced through the update status
-// and the update proceeds on the manifest allow-list alone); the allow-list itself is always enforced.
+// and the update proceeds on the manifest allow-list alone). In Mentat, updater.cjs also downgrades every other native
+// check failure (unlisted signer included) to a warning while this flag is false; only a manifest with no allow-list is refused.
 // flip to true in the release after 1.0.19 (Paul ruling 2026-10-26, T18)
 const PUBLISHER_PIN_ENFORCE=false;
 function allowList(thumbprints){
