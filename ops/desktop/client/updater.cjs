@@ -4,7 +4,7 @@ const path=require('node:path');
 const http=require('node:http');
 const crypto=require('node:crypto');
 const semver=require('semver');
-const {verifyWindowsPackage}=require('./native-signature.cjs');
+const {verifyWindowsPackage,PUBLISHER_PIN_ENFORCE}=require('./native-signature.cjs');
 const {jsonRequest,verifyEnvelope,applyKeyTransitions,downloadVerified,verifyPackageFile}=require('./trust.cjs');
 const {LAYOUT}=require('./install-layout.cjs');
 const VERIFY_RETRY_MS=6*60*60*1000;
@@ -33,6 +33,10 @@ class DesktopUpdater {
     this.platform=options.platform||process.platform;this.arch=options.arch||process.arch;
     this.request=options.request||jsonRequest;this.download=options.download||downloadVerified;
     this.verifyNativePackage=options.verifyNativePackage||verifyWindowsPackage;
+    // Mentat never ran native verification before 1.0.19, so until PUBLISHER_PIN_ENFORCE is flipped every native publisher
+    // failure (allow-list, Authenticode status, path, tool unavailable or timed out) warns and proceeds. Ed25519 and
+    // sha256/sha512 are checked separately in verifyPackageFile and stay hard.
+    this.enforcePublisher=options.enforcePublisher??PUBLISHER_PIN_ENFORCE;this.publisherWarned=new Set();
     this.makeFeed=options.makeFeed||verifiedFeed;this.busy=false;this.feed=null;this.ready=null;
     this.autoUpdater.autoDownload=false;this.autoUpdater.autoInstallOnAppQuit=false;
     this.autoUpdater.allowDowngrade=false;this.autoUpdater.disableDifferentialDownload=true;
@@ -73,7 +77,18 @@ class DesktopUpdater {
   async verifyNativeFile(filename,manifest){
     await verifyPackageFile(filename,manifest);await this.nativeTrust();
     if(this.platform!=='win32')throw new Error('This release supports verified Windows activation only.');
-    await this.verifyNativePackage(filename,this.publisherName);
+    // The publisher decision is the installer signer's thumbprint against the signed manifest's allow-list; a manifest
+    // without one (published before thumbprint pinning) is refused by verifyWindowsPackage, failing closed.
+    this.publisherWarning=null;
+    const warn=message=>{this.publisherWarning=message;if(this.publisherWarned.has(message))return;this.publisherWarned.add(message);this.onStatus(message);};
+    try{await this.verifyNativePackage(filename,manifest.publisherThumbprints,{enforce:this.enforcePublisher,warn});}
+    catch(error){
+      // A signed manifest with no allow-list stays refused even while the native checks are warn-only (1.0.19); trust.cjs
+      // already refuses an empty or malformed list, so a missing one is the only case left here.
+      if(this.enforcePublisher||manifest.publisherThumbprints===undefined)throw error;
+      const message='Update publisher warning: the native publisher check did not pass ('+error.message+'). This release still installs; the next release will refuse it.';
+      if(!this.publisherWarned.has(message))console.warn(message);warn(message);
+    }
     await verifyPackageFile(filename,manifest);
   }
   async ensureRecoveryBaseline(enrollment,fetch=true){
@@ -268,7 +283,7 @@ class DesktopUpdater {
     // untouched, so a later offer must still pass every rollback and downgrade check.
     try{await this.preparePending(enrollment,pending);}
     catch(error){this.ready=null;const notice='Staged update '+pending.version+' was not prepared: '+error.message;this.onStatus(notice);return notice;}
-    this.onStatus('Verified update '+pending.version+' waits for this app to close.');
+    this.onStatus('Verified update '+pending.version+' waits for this app to close.'+(this.publisherWarning?' '+this.publisherWarning:''));
   }
   async check(){
     if(this.busy||this.osShutdown)return;this.busy=true;
@@ -302,7 +317,7 @@ class DesktopUpdater {
       await this.download(enrollment,enrollment.deviceToken,m,path.dirname(this.packagePath(m)));
       const pending={envelope,version:m.version,fromVersion:this.version,phase:'staged',createdAt:new Date().toISOString()};
       this.writeState({...this.readState(),pending});await this.preparePending(enrollment,pending);
-      this.onStatus('Update '+m.version+' verified. Installs after you close this app.');
+      this.onStatus('Update '+m.version+' verified. Installs after you close this app.'+(this.publisherWarning?' '+this.publisherWarning:''));
       await this.report(enrollment,'downloaded');
     }catch(error){this.onStatus(this.ready?'Update check deferred. Verified update remains staged; local app remains available.':'Update deferred: '+error.message);
     }finally{this.busy=false;}
