@@ -1012,11 +1012,12 @@ def estimate_rows(file_stamp):
              'candidate':labels[k],'party':'','amount':v} for k,v in groups.items()]
 
 
-def named_candidates(row_lists, cycle=''):
+def named_candidates(row_lists, cycle='', also=()):
     """The candidate rows of each list, relabelled by Flow's rule (flow_data.CandidateNames: the filed spellings
     vote, the FEC candidate master chooses among them), so one candidate ID reads the same in Graph as in Flow.
     Every row's spelling votes once, whichever lists share it. Rows are copied; no amount or ID changes (D-342).
-    An ID that no spelling or master names keeps its row's label."""
+    An ID that no spelling or master names keeps its row's label. The lists in `also` (the PAC-candidate ties) are
+    relabelled after the vote and do not vote: their rows repeat the activity rows' spellings."""
     import flow_data
     pool = {id(row): row for rows in row_lists for row in rows}
     spelled = defaultdict(list)
@@ -1026,10 +1027,10 @@ def named_candidates(row_lists, cycle=''):
             spelled[row['candidate_id']].append((name, '', Decimal(row['amount'])))
     year = re.findall(r'\d{4}', str(cycle or ''))           # '2025-2026' -> 2026, the cycle Flow reads cn26 for
     names = flow_data.CandidateNames(spelled, year[-1] if year else None)
-    labels = {ident: names.resolve(ident, ident)['label'] for ident in {row.get('candidate_id') for row in pool.values()}
-              if ident and names.known(ident)}
+    every = {row.get('candidate_id') for rows in [*row_lists, *also] for row in rows}
+    labels = {ident: names.resolve(ident, ident)['label'] for ident in every if ident and names.known(ident)}
     return [[{**row, 'candidate': labels[row['candidate_id']]} if row.get('candidate_id') in labels else row
-             for row in rows] for rows in row_lists]
+             for row in rows] for rows in [*row_lists, *also]]
 
 
 def grouped(rows, id_field, label_field=None):
@@ -1372,10 +1373,10 @@ def _graph_view(paths, filters):
     # no direct amount rather than a false one.
     # One candidate ID, one label, in every list here and in Flow (flow_data.CandidateNames).
     names_of = [direct, candidate_rows, *(buckets.values() if buckets is not None else ())]
-    named = named_candidates(names_of, selected['cycle'])
-    direct, candidate_rows = named[0], named[1]
+    named = named_candidates(names_of, selected['cycle'], also=[ties])
+    direct, candidate_rows, ties = named[0], named[1], named[-1]
     if buckets is not None:
-        buckets = dict(zip(buckets, named[2:]))
+        buckets = dict(zip(buckets, named[2:-1]))
     own = ({row['id']: row['amount'] for row in grouped(direct,'candidate_id','candidate')}
            if mode == 'activity' and not selected['category'] and not selected['recipient'] else None)
     def candidate_groups(rows):

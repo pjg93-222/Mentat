@@ -1169,7 +1169,7 @@ class CandidateNames(unittest.TestCase):
         seen = defaultdict(set)
         for row in body['candidates'] + [row for rows in body['candidates_by_direction'].values() for row in rows]:
             seen[row['id']].add(row['label'])
-        for row in body['candidate_details']:
+        for row in body['candidate_details'] + body['pac_candidate_relationships']:
             seen[row['candidate_id']].add(row['candidate'])
         return dict(seen)
 
@@ -1181,6 +1181,7 @@ class CandidateNames(unittest.TestCase):
         self.assertEqual(flow_label, 'Ann Smith')
         self.assertEqual(self.graph_labels(direct)[self.CAND], {flow_label})
         self.assertEqual(self.graph_labels(activity)[self.CAND], {flow_label})
+        self.assertTrue(any(row['candidate_id'] == self.CAND for row in activity['pac_candidate_relationships']))
 
     def test_graph_names_a_candidate_by_flows_rule_not_by_the_last_row_read(self):
         """Regression (Graph activity): the label was the last workbook row's spelling, so a mis-keyed row read
