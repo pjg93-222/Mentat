@@ -1097,10 +1097,12 @@ class CandidateNames(unittest.TestCase):
                 for row in unit[schedule]:
                     if row.get('candidate_id') == self.CAND:
                         row['candidate_id'] = 'H4XX09009'
-        for sub_id, name, state, value in rows:
+        for sub_id, name, state, value, *party in rows:
             row = payment(sub_id, 'SMITH FOR CONGRESS', value, '2023-10-02', line='23', kind='24K',
                           committee='C90000009', candidate=self.CAND)
             row.update(candidate_name=name, candidate_office_state=state)
+            if party:
+                row['candidate_party'] = party[0]
             units[1]['disbursements'].append(row)
         return units
 
@@ -1230,6 +1232,132 @@ class CandidateNames(unittest.TestCase):
         self.assertEqual(self.graph_labels(changed[0])[self.CAND], {'Pat Jones'})
         self.assertEqual(self.graph_labels(body)[self.CAND], {'Ann Smith'})
 
+    # ------------------------------------------------------------ party from the cycle's FEC candidate master (D-343)
+    ROSEN_FIRST = (('k2', 'ZEDDY, ZOE', 'YY', 1000.0, 'DEM'), ('k1', 'SMITH, ANN', 'XX', 2500.0, 'REP'))
+
+    def test_the_rosen_fischer_case_takes_the_masters_party_not_the_first_filing(self):
+        """The first filing under the ID is the mis-keyed one (ROSEN, DEM under Fischer's REP ID): the node is the
+        master's party, unflagged, and its dollars do not move."""
+        body = self.flow(self.master('SMITH, ANN'), rows=self.ROSEN_FIRST)
+        node = by_id(body)[self.NODE]
+        self.assertEqual(node['party'], 'R')
+        self.assertNotIn('party_source', node)
+        self.assertEqual(self.received(body), 3500.0)
+        self.assertEqual(by_id(self.flow(None, rows=self.ROSEN_FIRST))[self.NODE]['party'], 'D',
+                         'without a master the first filing still answers (and is flagged)')
+
+    def test_a_candidate_missing_from_the_cycles_master_keeps_the_filed_party_and_is_flagged(self):
+        other = self.master('SMITH, ANN').replace(self.CAND, 'H4XX09999')
+        node = by_id(self.flow(other, rows=self.ROSEN_FIRST))[self.NODE]
+        self.assertEqual((node['party'], node['party_source']), ('D', 'filing'))
+
+    def test_each_cycle_reads_its_own_cycles_master_for_party(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for folder, party in (('cn22', 'DEM'), ('cn24', 'REP')):
+                (Path(directory) / folder).mkdir()
+                (Path(directory) / folder / 'cn.txt').write_text(self.master('SMITH, ANN').replace('|REP|', f'|{party}|'),
+                                                               encoding='ascii')
+            saved, flow_data.CANDIDATE_MASTER_ROOT = flow_data.CANDIDATE_MASTER_ROOT, directory
+            try:
+                party = flow_data.master_party
+                self.assertEqual(party(self.CAND, '2024', 'DEM'), ('R', 'master'))
+                self.assertEqual(party(self.CAND, 2022, 'REP'), ('D', 'master'))
+                self.assertEqual(party(self.CAND, '2023-2024', 'DEM'), ('R', 'master'), "Graph's cycle names its end year")
+                self.assertEqual(party(self.CAND, '2026', 'GRE'), ('G', 'filing'),
+                                 'no cn26: another cycle\'s master never answers; the filed party, flagged')
+                self.assertEqual(party(self.CAND, '2026', ''), ('', ''))
+                self.assertEqual(party('', '2024', 'DEM'), ('', ''))
+            finally:
+                flow_data.CANDIDATE_MASTER_ROOT = saved
+
+    def test_graph_takes_party_from_the_masters_of_its_rows_cycles_and_flags_the_rest(self):
+        """Regression (Graph): the party was the workbook's filed letter (D). cn26 says REP for the 2025-2026 rows."""
+        republican = self.master('SMITH, ANN').replace('|2024|', '|2026|')
+        for mode in ('direct', 'activity'):
+            with self.subTest(mode=mode):
+                body = self.graph(self.master('SMITH, ANN'), ['SMITH, ANN'], mode=mode, folders={'cn26': republican})
+                row = next(row for row in body['candidates'] if row['id'] == self.CAND)
+                self.assertEqual(row['party'], 'R')
+                self.assertNotIn('party_source', row)
+                self.assertNotIn('taken from the filing', body['candidate_note'])
+                missing = self.graph(self.master('SMITH, ANN'), ['SMITH, ANN'], mode=mode)   # cn24 only
+                row = next(row for row in missing['candidates'] if row['id'] == self.CAND)
+                self.assertEqual((row['party'], row['party_source']), ('D', 'filing'))
+                self.assertIn('Party for 1 candidate is taken from the filing', missing['candidate_note'])
+
+    def test_a_graph_row_missing_from_the_master_keeps_the_workbooks_party_text(self):
+        """The fallback is the filed party as written ("Other / Unclassified"), never a letter cut from it."""
+        import graph_data
+        with tempfile.TemporaryDirectory() as directory:
+            saved, flow_data.CANDIDATE_MASTER_ROOT = flow_data.CANDIDATE_MASTER_ROOT, directory
+            try:
+                row = {'candidate_id': self.CAND, 'candidate': 'SMITH, ANN', 'party': 'Other / Unclassified',
+                       'cycle': '2025-2026', 'amount': Decimal('1')}
+                (named,), = graph_data.named_candidates([[row]])
+            finally:
+                flow_data.CANDIDATE_MASTER_ROOT = saved
+        self.assertEqual((named['party'], named['party_source']), ('Other / Unclassified', 'filing'))
+
+    def industry(self, master_lines):
+        """industry_flow over a one-company workbook funding ROOT FUND (2024), whose saved snapshot is the base
+        scenario with its first Schedule E row filed as DEM under the REP candidate H4XX01001."""
+        import openpyxl
+        with tempfile.TemporaryDirectory() as directory:
+            units = fixture_units()
+            units[0]['expenditures'][0]['candidate_party'] = 'DEM'
+            write_fixture(directory, units)
+            path = Path(directory) / 'Acme.xlsx'
+            book = openpyxl.Workbook()
+            sheet = book.active
+            sheet.title = '2023-2024'
+            for row in [['Acme giving'], ['Recipient facts'], [],
+                        ['Fact Type', 'Company', 'Employee Tier', 'Amount', 'Recipient Category', 'Recipient Key',
+                         'Include in Analysis', 'Contributor', 'Committee ID'],
+                        ['Recipient', 'Acme', 'Corporate', 1500000, 'Super PAC', 'FEC:' + ROOT_ID, 'Yes', 'ACME CORP', ROOT_ID],
+                        ['Master', 'Acme', 'Corporate', 1500000, 'Super PAC', None, 'Yes', None, None]]:
+                sheet.append(row)
+            maps = book.create_sheet('PAC & Candidate Map')
+            for row in [['Mappings'], [], [], [], ['Cycle', 'Committee ID', 'Recipient Committee', 'Recipient Category',
+                                                   'Direct Candidate / Sponsor', 'Candidate ID(s)', 'Direct Party', 'Relationship'],
+                        ['2023-2024', ROOT_ID, 'ROOT FUND', 'Super PAC', '', '', '', 'No direct candidate/officeholder link']]:
+                maps.append(row)
+            activity = book.create_sheet('Downstream Activity')
+            for row in [['Downstream'], [], ['1 source rows condensed to 1 committee-candidate-activity groups'], [],
+                        ['Cycle', 'Source Committee ID', 'Candidate ID', 'Candidate / Officeholder', 'Candidate Party',
+                         'Support / Oppose', 'Net Included Amount'],
+                        ['2023-2024', ROOT_ID, self.CAND, 'SMITH, ANN', 'D', 'Support', 400000]]:
+                activity.append(row)
+            book.save(path)
+            book.close()
+            master = Path(directory) / 'master'
+            (master / 'cn24').mkdir(parents=True)
+            (master / 'cn24' / 'cn.txt').write_text(master_lines, encoding='ascii')
+            saved = flow_data.CANDIDATE_MASTER_ROOT, downstream.ROOT
+            flow_data.CANDIDATE_MASTER_ROOT, downstream.ROOT = master, Path(directory)
+            try:
+                built = flow_data.industry_flow('Acme', '2024', [path], top=8)
+                body = flow_data.industry_payload('Acme', '2024', [path], top=8)
+            finally:
+                flow_data.CANDIDATE_MASTER_ROOT, downstream.ROOT = saved
+        into = defaultdict(float)
+        for link in built['graph'].links.values():
+            if link['target'].startswith('outcome:'):
+                into[link['target']] += float(link['value'])
+        return dict(into), body
+
+    def test_industry_flow_places_spending_by_the_masters_party(self):
+        """Regression (industry flow): the first filed Schedule E row (DEM) put the REP candidate's $1,000,000 of
+        support under Democrats. The master moves it to Republicans; the total is unchanged."""
+        jones = 'S4YY00002|JONES, BOB|DEM|2024|YY|S|00|C|C|C90000011|1 MAIN ST||CITY|YY|20001\n'
+        placed, body = self.industry(self.master('SMITH, ANN') + jones)
+        self.assertEqual(placed, {'outcome:support:R': 1000000.0, 'outcome:oppose:D': 150000.0, 'outcome:contribution': 20000.0})
+        self.assertFalse([note for note in body['notes'] if note['key'] == 'party_from_filing'])
+        missing, body = self.industry(jones)
+        self.assertEqual(missing['outcome:support:D'], 1000000.0, 'not in cn24: the first filing answers')
+        self.assertEqual(sum(missing.values()), sum(placed.values()))
+        self.assertEqual([note['text'] for note in body['notes'] if note['key'] == 'party_from_filing'],
+                         [f"1 candidate's party taken from the filing: not in the {flow_data.cycle_label('2024')} FEC candidate master"])
+
     def test_the_master_places_the_node_and_the_mixed_filing_is_disclosed(self):
         body = self.flow(self.master('SMITH, ANNABELLE ROSE'))
         node = by_id(body)[self.NODE]
@@ -1355,7 +1483,7 @@ class CandidateNames(unittest.TestCase):
             try:
                 for cycle, year in ((2022, '2022'), ('2024', '2024'), (2028, '2026'), (None, '2026')):
                     self.assertEqual([item[0] for item in flow_data.candidate_master(cycle)][0], year, cycle)
-                self.assertEqual(flow_data.candidate_master(2024)[0][1]['H4XX01001'], ('NEW, NORA', 'BB'))
+                self.assertEqual(flow_data.candidate_master(2024)[0][1]['H4XX01001'], ('NEW, NORA', 'BB', 'REP'))
             finally:
                 flow_data.CANDIDATE_MASTER_ROOT = saved
 

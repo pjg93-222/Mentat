@@ -246,7 +246,7 @@ class GraphTests(unittest.TestCase):
         self.assertEqual({r['id'] for name in ('Contribution','Other','Contribution / Other')
                           for r in value['candidates_by_direction'][name]},{'H0CA00001','H0CA00002','H0CA00003'})
         self.assertEqual(value['candidates_by_direction']['Other'],
-                         [{'id':'H0CA00001','label':'Candidate One','amount':40,'party':'D'}])
+                         [{'id':'H0CA00001','label':'Candidate One','amount':40,'party':'D','party_source':'filing'}])  # no cn master: flagged (D-343)
         # Round-3 verify (D1): the segments' counts are each side's own, so
         # they need not add up to the candidates behind them. The response
         # says by how much, for the drawer to show under the segments: the

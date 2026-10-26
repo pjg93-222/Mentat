@@ -221,12 +221,12 @@ def _candidate_master_file(entry):
     for line in Path(entry[0]).read_text(encoding='utf-8', errors='replace').splitlines():
         fields = line.split('|')
         if len(fields) > 4 and fields[0] and fields[1].strip() and fields[0] not in found:
-            found[fields[0]] = (fields[1].strip(), fields[4].strip())
+            found[fields[0]] = (fields[1].strip(), fields[4].strip(), fields[2].strip().upper())
     return found
 
 
 def candidate_master(cycle=None):
-    """[(year, {candidate ID: (name as filed, office state)})] from the FEC candidate master on disk, the file for
+    """[(year, {candidate ID: (name as filed, office state, party code)})] from the FEC candidate master on disk, the file for
     the flow's cycle first and then the newest first, as committee_names orders its files; [] when this machine
     has none."""
     import evidence_csv
@@ -244,6 +244,33 @@ def candidate_master(cycle=None):
         return found
     except OSError:
         return []
+
+
+def cycle_year(cycle):
+    """'2024' -> '2024'; Graph's '2025-2026' -> '2026' (the year a cn<yy> file is named for); '' when none."""
+    years = re.findall(r'\d{4}', str(cycle or ''))
+    return years[-1] if years else ''
+
+
+UNKNOWN_PARTY_CODES = frozenset({'', 'UNK'})
+
+
+def master_party(candidate, cycle, filed='', masters=None):
+    """(party letter, source) for a candidate ID in one cycle (D-343). The FEC candidate master of that cycle
+    (cn<yy>/cn.txt, CAND_PTY_AFFILIATION) answers: source 'master'. Never the first filing: Coinbase PAC filed
+    ROSEN (DEM) under Deb Fischer's S2NE00094 (REP). Only when that cycle's master does not list the ID (or lists
+    it with no party) does the filed party stand, source 'filing', which every view flags. ('', '') when neither
+    says. `masters` is candidate_master's list; read here when not given."""
+    year = cycle_year(cycle)
+    if candidate and year:
+        for master_year, names in (candidate_master(year) if masters is None else masters):
+            entry = names.get(candidate) if master_year == year else None
+            if entry and entry[2] not in UNKNOWN_PARTY_CODES:
+                return PARTY_LETTER.get(entry[2][:3], entry[2][:1]), 'master'
+    text = str(filed or '').strip().upper()
+    if not (candidate and text):
+        return '', ''
+    return PARTY_LETTER.get(text[:3], text[:1]), 'filing'
 
 
 def name_words(name):
@@ -353,7 +380,7 @@ def named_candidate_id(masters, cycle, name, office, state):
     mine = [names for year, names in masters if year == str(cycle or '')]
     found = set()
     for names in (mine or [names for _year, names in masters]):
-        for candidate, (master_name, master_state) in names.items():
+        for candidate, (master_name, master_state, _party) in names.items():
             if candidate[:1] == office and master_state == state and name_words(master_name.partition(',')[0]) & surname:
                 found.add(candidate)
     return next(iter(found)) if len(found) == 1 else ''
@@ -921,8 +948,11 @@ def committee_flow(committee, cycle, *, identifier='', depth=DEFAULT_DEPTH, root
         candidate = row['candidate_id'] or ''
         word = DIRECTION_WORD.get(row['direction'], 'unknown')
         named = naming.resolve(candidate, str(row.get('candidate') or candidate or 'Unidentified candidate'))
+        party, source = master_party(candidate, cycle, parties.get(candidate, ''), masters)
+        if source == 'filing':
+            named['party_source'] = 'filing'       # not in this cycle's FEC candidate master: the filed party, flagged
         return graph.node(f'candidate:{candidate or "unidentified"}:{word}', stage=last, kind='candidate',
-                          candidate_id=candidate, direction=word, party=parties.get(candidate, ''),
+                          candidate_id=candidate, direction=word, party=party,
                           office=candidate[:1] if candidate else '', fec_url=candidate_url(candidate), **named)
 
     def sink(kind, text, stage, **fields):
@@ -2159,6 +2189,15 @@ def industry_flow(label, cycle, paths, *, depth=DEFAULT_DEPTH, top=DEFAULT_TOP, 
         party = str(row.get('party') or '').upper()
         if row.get('candidate_id') and party:
             parties.setdefault(str(row['candidate_id']), PARTY_LETTER.get(party, party[:1]))
+    masters, party_filed = candidate_master(cycle), set()
+
+    def party_of(candidate, direction, filed=''):
+        # D-343: the cycle's FEC candidate master, the filed party only when it lacks the ID; flagged in the notes
+        # when the party places money (support or oppose: contributions are one outcome whatever the party).
+        letter, source = master_party(candidate, cycle, parties.get(candidate) or filed, masters)
+        if source == 'filing' and outcome_of(direction, letter)[0] not in ('contribution', 'unknown'):
+            party_filed.add(candidate)
+        return letter
 
     def company_node(company):
         return graph.node('company:' + company, stage=0, label=company, kind='donor', name_as_filed=company,
@@ -2228,7 +2267,8 @@ def industry_flow(label, cycle, paths, *, depth=DEFAULT_DEPTH, top=DEFAULT_TOP, 
                                 label='Candidates directly')
             for company, value in sorted(drawn_in.items()):
                 graph.link(company_node(company)['id'], bucket['id'], value, 'receipt', 0, [], basis='workbook')
-            party = parties.get(info[ident]['candidate_id'], PARTY_LETTER.get(str(info[ident]['party']).upper()[:3], ''))
+            party = party_of(info[ident]['candidate_id'], 'Contribution / Other',
+                             PARTY_LETTER.get(str(info[ident]['party']).upper()[:3], ''))
             graph.link(bucket['id'], outcome_node('Contribution / Other', party)['id'], given, 'contribution', 0, [])
         else:
             bucket = graph.node('bucket:other-recipients', stage=1, kind='bucket', bucket='other_recipients',
@@ -2288,7 +2328,7 @@ def industry_flow(label, cycle, paths, *, depth=DEFAULT_DEPTH, top=DEFAULT_TOP, 
                 adjustments[ident] += value
                 continue
             spent_candidates += value
-            party = parties.get(str(row.get('candidate_id') or ''), '')
+            party = party_of(str(row.get('candidate_id') or ''), row['direction'])
             filings = row.get('filings') or []
             graph.link(node['id'], outcome_node(row['direction'], party)['id'], value,
                        DIRECTION_KIND.get(row['direction'], 'ie_unknown'), len(filings), [], committee=ident,
@@ -2364,7 +2404,7 @@ def industry_flow(label, cycle, paths, *, depth=DEFAULT_DEPTH, top=DEFAULT_TOP, 
             'parents': parents, 'tag': tag_of, 'adjustments': adjustments, 'counted': counted, 'funded': funded, 'facts': facts,
             'info': info, 'industry': label, 'workbook_total': sum(funded.values(), ZERO), 'reports': reports,
             'committees': committees, 'followed': followed, 'first': first, 'money': money,
-            'refunds_back': refunds_back,
+            'refunds_back': refunds_back, 'party_from_filing': sorted(party_filed),
             'unfollowed': len(first) - len(followed)}
 
 
@@ -2520,6 +2560,11 @@ def industry_payload(label, cycle, paths, *, basis='reported', top=DEFAULT_TOP, 
     notes.append({'key': 'pooled', 'text': 'reported activity: money a committee pools is shown by the committee that '
                                            'spent it, not traced to a company'})
     notes.extend(date_notes(totals))
+    if built.get('party_from_filing'):
+        count = len(built['party_from_filing'])
+        whose = "1 candidate's" if count == 1 else f"{count} candidates'"
+        notes.append({'key': 'party_from_filing', 'text': f"{whose} party taken from the filing: not in the "
+                                                           f"{cycle_label(built['cycle'])} FEC candidate master"})
     notes.extend(carry_notes(built['found'], built['cycle']))
     notes.extend(refund_notes(built['ledgers'], None, built['label'], built['drawn']))
     for direct, who in ((True, 'candidates'), (False, 'other recipients')):

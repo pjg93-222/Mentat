@@ -1017,7 +1017,11 @@ def named_candidates(row_lists, cycle='', also=()):
     vote, the FEC candidate master chooses among them), so one candidate ID reads the same in Graph as in Flow.
     Every row's spelling votes once, whichever lists share it. Rows are copied; no amount or ID changes (D-342).
     An ID that no spelling or master names keeps its row's label. The lists in `also` (the PAC-candidate ties) are
-    relabelled after the vote and do not vote: their rows repeat the activity rows' spellings."""
+    relabelled after the vote and do not vote: their rows repeat the activity rows' spellings.
+
+    A row's party is its candidate's in the FEC candidate master of the row's own cycle (D-343,
+    flow_data.master_party), never the filed party; a row whose cycle's master lacks the ID keeps the filed
+    party as written and is marked party_source 'filing'."""
     import flow_data
     pool = {id(row): row for rows in row_lists for row in rows}
     spelled = defaultdict(list)
@@ -1029,8 +1033,17 @@ def named_candidates(row_lists, cycle='', also=()):
     names = flow_data.CandidateNames(spelled, year[-1] if year else None)
     every = {row.get('candidate_id') for rows in [*row_lists, *also] for row in rows}
     labels = {ident: names.resolve(ident, ident)['label'] for ident in every if ident and names.known(ident)}
-    return [[{**row, 'candidate': labels[row['candidate_id']]} if row.get('candidate_id') in labels else row
-             for row in rows] for rows in [*row_lists, *also]]
+
+    def named(row):
+        out = {**row, 'candidate': labels[row['candidate_id']]} if row.get('candidate_id') in labels else dict(row)
+        if 'party' in row and row.get('candidate_id'):
+            party, source = flow_data.master_party(row['candidate_id'], row.get('cycle') or cycle, row['party'], names.masters)
+            if source == 'master':
+                out['party'] = party
+            elif source == 'filing':
+                out['party_source'] = 'filing'       # the workbook's own party text, unchanged ("Other / Unclassified")
+        return out
+    return [[named(row) for row in rows] for rows in [*row_lists, *also]]
 
 
 def grouped(rows, id_field, label_field=None):
@@ -1383,16 +1396,26 @@ def _graph_view(paths, filters):
            if mode == 'activity' and not selected['category'] and not selected['recipient'] else None)
     def candidate_groups(rows):
         result = grouped(rows,'candidate_id','candidate')
-        parties = defaultdict(set)
+        parties, filed = defaultdict(set), set()
         for row in rows:
             if row.get('party'):
                 parties[row['candidate_id']].add(row['party'])
+            if row.get('party_source') == 'filing':
+                filed.add(row['candidate_id'])
         for candidate in result:
             candidate['party'] = ' / '.join(sorted(parties[candidate['id']]))
+            if candidate['id'] in filed:
+                candidate['party_source'] = 'filing'      # D-343: not in the cycle's FEC candidate master
             if own is not None and candidate['id'] != 'unidentified-candidate':
                 candidate['direct'] = own.get(candidate['id'], 0.0)
         return result
     chart_candidates = candidate_groups(candidate_rows) if available else []
+    filed_party = sorted({row['candidate_id'] for row in candidate_rows if row.get('party_source') == 'filing'})
+    if available and filed_party:
+        said = (f"Party for {len(filed_party)} candidate{'s' if len(filed_party) != 1 else ''} is taken from the "
+                "filing: not in that cycle's FEC candidate master.")
+        tail = (trace or {}).get('note') or ''       # the trace sentence stays last (Graph's not-traced contract)
+        note = (note[:-len(tail)].rstrip() + ' ' + said + ' ' + tail) if tail and note.endswith(tail) else note + ' ' + said
     side_groups = ({name:candidate_groups(rows) for name,rows in buckets.items()}
                    if mode == 'activity' and buckets is not None else None)
     if any(stamp(path) != version for path,version in zip(paths,stamps)):

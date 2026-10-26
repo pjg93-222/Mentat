@@ -519,6 +519,8 @@
     const column = result.columns[node.stage];
     if (column && column.total && !node.stub) lines.push(`${percent(node.value / column.total)} of ${column.label || 'this stage'}`);
     if (node.pooled && (node.share_from_upstream || []).length) lines.push(shares(node, cycle));
+    // D-343: party comes from the FEC candidate master of the cycle; when that file lacks the ID, say whose word it is.
+    if (node.party_source === 'filing') lines.push('Party as filed: not in this cycle\'s FEC candidate master');
     if (node.balance === 'unspent') lines.push(`cash on hand ${full(node.cash || 0)} at the end of the window`
       + ((node.held || 0) > 0 ? ` + ${heldWords(node.held_kinds)} ${full(node.held)} still held` : ''));
     if (node.bucket === 'small') {
