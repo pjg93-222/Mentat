@@ -1012,6 +1012,27 @@ def estimate_rows(file_stamp):
              'candidate':labels[k],'party':'','amount':v} for k,v in groups.items()]
 
 
+def named_candidates(row_lists, cycle='', also=()):
+    """The candidate rows of each list, relabelled by Flow's rule (flow_data.CandidateNames: the filed spellings
+    vote, the FEC candidate master chooses among them), so one candidate ID reads the same in Graph as in Flow.
+    Every row's spelling votes once, whichever lists share it. Rows are copied; no amount or ID changes (D-342).
+    An ID that no spelling or master names keeps its row's label. The lists in `also` (the PAC-candidate ties) are
+    relabelled after the vote and do not vote: their rows repeat the activity rows' spellings."""
+    import flow_data
+    pool = {id(row): row for rows in row_lists for row in rows}
+    spelled = defaultdict(list)
+    for row in pool.values():
+        name = str(row.get('candidate') or '').strip()
+        if row.get('candidate_id') and name and name != row['candidate_id']:
+            spelled[row['candidate_id']].append((name, '', Decimal(row['amount'])))
+    year = re.findall(r'\d{4}', str(cycle or ''))           # '2025-2026' -> 2026, the cycle Flow reads cn26 for
+    names = flow_data.CandidateNames(spelled, year[-1] if year else None)
+    every = {row.get('candidate_id') for rows in [*row_lists, *also] for row in rows}
+    labels = {ident: names.resolve(ident, ident)['label'] for ident in every if ident and names.known(ident)}
+    return [[{**row, 'candidate': labels[row['candidate_id']]} if row.get('candidate_id') in labels else row
+             for row in rows] for rows in [*row_lists, *also]]
+
+
 def grouped(rows, id_field, label_field=None):
     totals, labels = defaultdict(Decimal), {}
     for row in rows:
@@ -1197,7 +1218,9 @@ def _graph_view_ready(paths, filters):
         full_sources = [p for path in paths for p in transfer_files(path)] if filters.get('mode') == 'activity' else []
         bundles = [audit_manifest_path(path) for path in paths] if filters.get('mode') == 'activity' else []
         publication_files = [file for path in paths for file in report_publication.dependencies(path)]
-        return file_signature([*paths, *publication_files, *snapshots, *full_sources, *bundles, *map(collection_gaps.quality_csv, paths)])
+        import flow_data  # the candidate master names the candidates (named_candidates)
+        return file_signature([*paths, *publication_files, *snapshots, *full_sources, *bundles, *map(collection_gaps.quality_csv, paths),
+                               *flow_data.candidate_master_files()])
     before = dependencies()
     selection = tuple((k,str(filters.get(k) or '')) for k in
                       ('company','tier','cycle','category','recipient','latest','funding','mode','direction'))
@@ -1348,6 +1371,14 @@ def _graph_view(paths, filters):
     # committee narrows the direct rows to none (a PAC is not a candidate
     # committee): that 0 would say the industry gave nothing, so those views carry
     # no direct amount rather than a false one.
+    # One candidate ID, one label, in every list here and in Flow (flow_data.CandidateNames).
+    names_of = [direct, candidate_rows, *(buckets.values() if buckets is not None else ())]
+    # The report's own cycle when it has one and none is chosen, so its candidate master is read first, as in Flow.
+    name_cycle = selected['cycle'] or (years[0] if len(set(years)) == 1 else '')
+    named = named_candidates(names_of, name_cycle, also=[ties])
+    direct, candidate_rows, ties = named[0], named[1], named[-1]
+    if buckets is not None:
+        buckets = dict(zip(buckets, named[2:-1]))
     own = ({row['id']: row['amount'] for row in grouped(direct,'candidate_id','candidate')}
            if mode == 'activity' and not selected['category'] and not selected['recipient'] else None)
     def candidate_groups(rows):

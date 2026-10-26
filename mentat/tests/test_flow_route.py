@@ -22,7 +22,7 @@ Scenario (cycle 2024; every amount a whole number of dollars so the arithmetic i
 Downstream committees' figures on the saved snapshots are taken from the measurement
 (downstream.snapshot_view), never written down here, so F12 moving them does not break a test.
 """
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import copy
 from decimal import Decimal
 import json
@@ -1125,6 +1125,110 @@ class CandidateNames(unittest.TestCase):
 
     def master(self, name, state='XX'):
         return f'{self.CAND}|{name}|REP|2024|{state}|H|01|I|C|C90000009|1 MAIN ST||CITY|{state}|20001\n'
+
+    # ------------------------------------------------------------ one rule in every view (Flow, Graph direct, Graph activity)
+    def graph(self, master_lines, names, *, mode='activity', other=(), between=None, seen=None, folders=None):
+        """Graph (graph_data.graph_view) over the shared fixture workbook with its candidate re-keyed to CAND and
+        its filed names replaced by `names` (the PAC map's sponsor gets the first). `other` adds Downstream
+        Activity rows. The candidate master is `master_lines` (cn24)."""
+        import openpyxl
+        import graph_data
+        from graph_fixture import add_graph_sheets
+        with tempfile.TemporaryDirectory() as directory:
+            master = Path(directory) / 'master'
+            (master / 'cn24').mkdir(parents=True)
+            (master / 'cn24' / 'cn.txt').write_text(master_lines, encoding='ascii')
+            for folder, text in (folders or {}).items():   # more master files: {'cn26': lines}
+                (master / folder).mkdir()
+                (master / folder / 'cn.txt').write_text(text, encoding='ascii')
+            path = Path(directory) / 'Giving.xlsx'
+            book = openpyxl.Workbook()
+            add_graph_sheets(book)
+            for row in book['PAC & Candidate Map'].iter_rows(min_row=6):
+                if row[5].value == 'H0CA00001':
+                    row[4].value, row[5].value = names[0], self.CAND
+            sheet = book['Downstream Activity']
+            filed = iter(names * 4)
+            for row in sheet.iter_rows(min_row=6):
+                if row[2].value == 'H0CA00001':
+                    row[2].value, row[3].value = self.CAND, next(filed)
+            for row in other:
+                sheet.append(row)
+            sheet['A3'] = f'{100 + len(other)} source rows condensed to {4 + len(other)} committee-candidate-activity groups'
+            book.save(path)
+            book.close()
+            saved, flow_data.CANDIDATE_MASTER_ROOT = flow_data.CANDIDATE_MASTER_ROOT, master
+            try:
+                if between is not None:                 # read once, change the master, read again (the cache)
+                    seen.append(graph_data.graph_view([path], {'mode': mode}))
+                    os.utime(master / 'cn24' / 'cn.txt', ns=(1, 1))
+                    between(master)
+                return graph_data.graph_view([path], {'mode': mode})
+            finally:
+                flow_data.CANDIDATE_MASTER_ROOT = saved
+
+    def graph_labels(self, body):
+        """Every label Graph gives each candidate ID: the ranking, the direction sides and the details table."""
+        seen = defaultdict(set)
+        for row in body['candidates'] + [row for rows in body['candidates_by_direction'].values() for row in rows]:
+            seen[row['id']].add(row['label'])
+        for row in body['candidate_details'] + body['pac_candidate_relationships']:
+            seen[row['candidate_id']].add(row['candidate'])
+        return dict(seen)
+
+    def test_one_candidate_reads_the_same_in_flow_and_in_both_graph_views(self):
+        master = self.master('SMITH, ANNABELLE ROSE')
+        flow_label = by_id(self.flow(master))[self.NODE]['label']
+        direct = self.graph(master, ['SMITH, ANN'], mode='direct')
+        activity = self.graph(master, ['SMITH, ANN', 'ZEDDY, ZOE'])
+        self.assertEqual(flow_label, 'Ann Smith')
+        self.assertEqual(self.graph_labels(direct)[self.CAND], {flow_label})
+        self.assertEqual(self.graph_labels(activity)[self.CAND], {flow_label})
+        self.assertTrue(any(row['candidate_id'] == self.CAND for row in activity['pac_candidate_relationships']))
+
+    def test_graph_names_a_candidate_by_flows_rule_not_by_the_last_row_read(self):
+        """Regression (Graph activity): the label was the last workbook row's spelling, so a mis-keyed row read
+        last renamed the candidate. Now the spellings vote and the master chooses, as in Flow; amounts stay."""
+        master = self.master('SMITH, ANN')
+        before = self.graph(master, ['SMITH, ANN'])
+        body = self.graph(master, ['SMITH, ANN', 'SMITH, ANN', 'SMITH, ANN', 'ZEDDY, ZOE'])
+        self.assertEqual(self.graph_labels(body)[self.CAND], {'Ann Smith'})
+        self.assertEqual([(row['id'], row['amount']) for row in body['candidates']],
+                         [(row['id'], row['amount']) for row in before['candidates']])
+
+    def test_graph_direct_view_takes_the_masters_name_when_no_filed_spelling_agrees(self):
+        """Regression (Graph direct): the PAC map's sponsor text was the label as it stood."""
+        body = self.graph(self.master('SMITH, ANN'), ['Candidate One'], mode='direct')
+        self.assertEqual(self.graph_labels(body)[self.CAND], {'Ann Smith'})
+        self.assertEqual([row['amount'] for row in body['candidates']], [90])
+
+    def test_a_shared_first_name_with_another_surname_stays_another_person_in_every_view(self):
+        """JOHNSON, ANN filed under SMITH, ANN's ID neither names the node nor merges with the real Ann Johnson."""
+        johnson = 'H4XX02002|JOHNSON, ANN|DEM|2024|XX|H|02|C|C|C90000010|1 MAIN ST||CITY|XX|20001\n'
+        master = self.master('SMITH, ANN') + johnson
+        node = by_id(self.flow(master, rows=(('k1', 'JOHNSON, ANN', 'XX', 2500.0),)))[self.NODE]
+        self.assertEqual(node['label'], 'Ann Smith')
+        body = self.graph(master, ['JOHNSON, ANN'],
+                          other=(['2025-2026', 'C00000003', 'H4XX02002', 'JOHNSON, ANN', 'D', 'Support', 50],))
+        labels = self.graph_labels(body)
+        self.assertEqual((labels[self.CAND], labels['H4XX02002']), ({'Ann Smith'}, {'Ann Johnson'}))
+        self.assertEqual(flow_data.CandidateNames({}, masters=[('2024', {})]).resolve('H4XX02002', 'JOHNSON, ANN')['label'],
+                         'Ann Johnson')
+
+    def test_an_unfiltered_one_cycle_graph_reads_its_own_cycles_master_before_a_newer_one(self):
+        """The fixture report is 2025-2026: with no cycle chosen, cn26 names the candidate before the newer cn28,
+        as Flow reads its cycle's file first."""
+        body = self.graph(self.master('JONES, PAT'), ['Candidate One'], mode='direct',
+                          folders={'cn26': self.master('SMITH, ANN'), 'cn28': self.master('ZEDDY, ZOE')})
+        self.assertEqual(self.graph_labels(body)[self.CAND], {'Ann Smith'})
+
+    def test_the_graph_cache_reads_a_changed_candidate_master_again(self):
+        changed = []
+        body = self.graph(self.master('JONES, PAT'), ['Candidate One'], mode='direct',
+                          between=lambda folder: (folder / 'cn24' / 'cn.txt').write_text(self.master('SMITH, ANN'), encoding='ascii'),
+                          seen=changed)
+        self.assertEqual(self.graph_labels(changed[0])[self.CAND], {'Pat Jones'})
+        self.assertEqual(self.graph_labels(body)[self.CAND], {'Ann Smith'})
 
     def test_the_master_places_the_node_and_the_mixed_filing_is_disclosed(self):
         body = self.flow(self.master('SMITH, ANNABELLE ROSE'))

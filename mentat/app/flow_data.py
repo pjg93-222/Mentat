@@ -264,6 +264,82 @@ def same_person(a, b):
     return bool(name_words(a.partition(',')[0]) & name_words(b) or name_words(b.partition(',')[0]) & name_words(a))
 
 
+class CandidateNames:
+    """Who a candidate ID names: the one rule for every view that labels candidates (Flow, Graph).
+
+    `spelled` is {candidate ID: [(name as filed, filed office state, amount), ...]}, in filing order. The filed
+    spellings vote, the FEC candidate master (cn*/cn.txt of `cycle` first) chooses among them, and the ID's own
+    state keeps a mis-keyed row (another candidate's name and state under this ID: Coinbase PAC's ROSEN under
+    Deb Fischer's S2NE00094) from naming or placing it. Labels and state only: no amount is read or moved (D-342:
+    a filing stays with the ID FEC filed it under)."""
+
+    def __init__(self, spelled, cycle=None, masters=None):
+        self.spelled = spelled
+        self.masters = candidate_master(cycle) if masters is None else masters
+
+    @staticmethod
+    def home_state(candidate):
+        return candidate[2:4] if candidate[:1] in ('H', 'S') else ''
+
+    def voters(self, candidate):
+        # Rows filed under the ID's own state when any were; a mis-keyed row (another candidate's name and state under
+        # this ID) then neither names nor places the node. A row with no state is not a disagreement.
+        rows, home = self.spelled.get(candidate, []), self.home_state(candidate)
+        return [row for row in rows if row[1] in (home, '')] if any(row[1] == home for row in rows) and home else rows
+
+    def name(self, candidate, fallback, master=None):
+        """(name, from_master). The filed spellings vote: "LAST, FIRST" first, then the most rows, then the larger
+        amount, then the first filed (never the alphabet: ROSEN beat FISCHER that way). The master name does not
+        replace a spelling (it is the legal name: "James Johnson" for Mike Johnson); it chooses among them, keeping
+        those that agree with it (same_person) and, of those, the ones whose surname part matches. It is the label
+        only when no filed spelling agrees with it or none was filed."""
+        rows = self.voters(candidate)
+        if master:
+            agreeing = [row for row in rows if same_person(row[0], master)]
+            if not agreeing:
+                return master, True
+            surname = name_words(master.partition(',')[0])
+            rows = [row for row in agreeing if name_words(row[0].partition(',')[0]) & surname] or agreeing
+        votes = {}
+        for index, (name, _state, value) in enumerate(rows):
+            vote = votes.setdefault(name, [0, ZERO, -index])
+            vote[0] += 1
+            vote[1] += value
+        if not votes:
+            return fallback, False
+        return max(votes.items(), key=lambda item: (',' in item[0], item[1][0], len(item[0]), item[1][1], item[1][2]))[0], False
+
+    def state(self, candidate):
+        # The majority filed office state of the rows that name the node, the ID's own state only as a last resort.
+        votes = {}
+        for index, (_name, state, value) in enumerate(self.voters(candidate)):
+            if state:
+                vote = votes.setdefault(state, [0, ZERO, -index])
+                vote[0] += 1
+                vote[1] += value
+        return max(votes.items(), key=lambda item: item[1])[0] if votes else self.home_state(candidate)
+
+    def master_entry(self, candidate):
+        return next(((names[candidate], year) for year, names in self.masters if candidate in names), None)
+
+    def known(self, candidate):
+        """True when a filed spelling or the master names the ID (else the caller's fallback is all there is)."""
+        return bool(self.spelled.get(candidate)) or self.master_entry(candidate) is not None
+
+    def resolve(self, candidate, fallback):
+        """{'label', 'name_as_filed', 'state'}, and 'name_master' (the master file's year) when the master names it."""
+        known = self.master_entry(candidate)
+        filed, from_master = self.name(candidate, fallback, known[0][0] if known else None)
+        state, home = self.state(candidate), self.home_state(candidate)
+        out = {'label': display_person(filed) if candidate else 'Unidentified candidate', 'name_as_filed': filed}
+        if known:
+            state = known[0][1] if home and known[0][1] else state
+            if from_master:
+                out['name_master'] = known[1]
+        out['state'] = state if home else ''
+        return out
+
+
 def named_candidate_id(masters, cycle, name, office, state):
     """The one FEC candidate-master ID whose surname shares a word with the filed name's surname (the part before
     the comma), whose office letter (H, S, P) is `office` and whose office state is `state`; '' when none or more than
@@ -818,53 +894,10 @@ def committee_flow(committee, cycle, *, identifier='', depth=DEFAULT_DEPTH, root
                     spelled[candidate].append(
                         (str(row['candidate_name']).strip(), filed_state,
                          dec(row.get('expenditure_amount') if schedule == 'expenditures' else row.get('disbursement_amount'))))
-    masters = candidate_master(cycle)
+    naming = CandidateNames(spelled, cycle)
+    masters = naming.masters
     drawn_filings = defaultdict(list)       # candidate node id -> the filings behind its drawn links
     link_filings = defaultdict(set)         # (source, target, kind) of a link into a candidate -> its filings' sub_ids
-
-    def home_state(candidate):
-        return candidate[2:4] if candidate[:1] in ('H', 'S') else ''
-
-    def voters(candidate):
-        # Rows filed under the ID's own state when any were; a mis-keyed row (another candidate's name and state under
-        # this ID) then neither names nor places the node. A row with no state is not a disagreement.
-        rows, home = spelled.get(candidate, []), home_state(candidate)
-        return [row for row in rows if row[1] in (home, '')] if any(row[1] == home for row in rows) and home else rows
-
-    def candidate_name(candidate, fallback, master=None):
-        """(name, from_master). The filed spellings vote: "LAST, FIRST" first, then the most rows, then the larger
-        amount, then the first filed (never the alphabet: ROSEN beat FISCHER that way). The master name does not
-        replace a spelling (it is the legal name: "James Johnson" for Mike Johnson); it chooses among them, keeping
-        those that share a word with it and, of those, the ones whose surname part matches. It is the label only
-        when no filed spelling agrees with it or none was filed."""
-        rows = voters(candidate)
-        if master:
-            agreeing = [row for row in rows if same_person(row[0], master)]
-            if not agreeing:
-                return master, True
-            surname = name_words(master.partition(',')[0])
-            rows = [row for row in agreeing if name_words(row[0].partition(',')[0]) & surname] or agreeing
-        votes = {}
-        for index, (name, _state, value) in enumerate(rows):
-            vote = votes.setdefault(name, [0, ZERO, -index])
-            vote[0] += 1
-            vote[1] += value
-        if not votes:
-            return fallback, False
-        return max(votes.items(), key=lambda item: (',' in item[0], item[1][0], len(item[0]), item[1][1], item[1][2]))[0], False
-
-    def candidate_state(candidate):
-        # The majority filed office state of the rows that name the node, the ID's own state only as a last resort.
-        votes = {}
-        for index, (_name, state, value) in enumerate(voters(candidate)):
-            if state:
-                vote = votes.setdefault(state, [0, ZERO, -index])
-                vote[0] += 1
-                vote[1] += value
-        return max(votes.items(), key=lambda item: item[1])[0] if votes else home_state(candidate)
-
-    def candidate_master_entry(candidate):
-        return next(((names[candidate], year) for year, names in masters if candidate in names), None)
     source_rows = {}
     for key, unit in found['units'].items():
         if key[0] == cycle:
@@ -887,20 +920,10 @@ def committee_flow(committee, cycle, *, identifier='', depth=DEFAULT_DEPTH, root
     def candidate_node(row):
         candidate = row['candidate_id'] or ''
         word = DIRECTION_WORD.get(row['direction'], 'unknown')
-        known = candidate_master_entry(candidate)
-        filed, from_master = candidate_name(candidate, str(row.get('candidate') or candidate or 'Unidentified candidate'),
-                                            known[0][0] if known else None)
-        state = candidate_state(candidate)
-        extra = {}
-        if known:
-            state = known[0][1] if home_state(candidate) and known[0][1] else state
-            if from_master:
-                extra['name_master'] = known[1]
-        return graph.node(f'candidate:{candidate or "unidentified"}:{word}', stage=last,
-                          label=display_person(filed) if candidate else 'Unidentified candidate', kind='candidate',
-                          candidate_id=candidate, direction=word, name_as_filed=filed,
-                          party=parties.get(candidate, ''), office=candidate[:1] if candidate else '',
-                          state=state if home_state(candidate) else '', fec_url=candidate_url(candidate), **extra)
+        named = naming.resolve(candidate, str(row.get('candidate') or candidate or 'Unidentified candidate'))
+        return graph.node(f'candidate:{candidate or "unidentified"}:{word}', stage=last, kind='candidate',
+                          candidate_id=candidate, direction=word, party=parties.get(candidate, ''),
+                          office=candidate[:1] if candidate else '', fec_url=candidate_url(candidate), **named)
 
     def sink(kind, text, stage, **fields):
         return graph.node(f'balance:{kind}:{stage}', stage=stage, label=text, kind='balance', balance=kind, **fields)
@@ -1725,12 +1748,20 @@ def _prepared(key, prepare):
                     del _preparing[key]
 
 
-def _candidate_master_stamps():
-    """The cn*/cn.txt files candidate_master reads, so a changed or added candidate master is read again."""
+def candidate_master_files():
+    """The cn*/cn.txt files candidate_master reads, for the caches of every view it labels (Flow, Graph)."""
     import evidence_csv
     base = Path(CANDIDATE_MASTER_ROOT) if CANDIDATE_MASTER_ROOT else evidence_csv.INPUTS / 'fec_beneficiary'
     try:
-        return tuple(_stamp(path) for path in sorted(base.glob('cn*/cn.txt')))
+        return sorted(base.glob('cn*/cn.txt'))
+    except OSError:
+        return []
+
+
+def _candidate_master_stamps():
+    """So a changed or added candidate master is read again."""
+    try:
+        return tuple(_stamp(path) for path in candidate_master_files())
     except OSError:
         return ()
 
