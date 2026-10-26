@@ -38,8 +38,8 @@ test('LAUNCH F5: enforced, an untrusted chain is accepted on the pinned thumbpri
   // NotSigned / HashMismatch: no intact signature, refused even with the pinned thumbprint.
   for(const status of [2,3])assert.throws(()=>verifySignatureResult(result(status,PIN),filename,[PIN],on),/could not be verified/);
 });
-test('T18 (Paul 2026-10-26): the shipped default is warn-only for 1.0.19 (flip PUBLISHER_PIN_ENFORCE in the next release)',()=>{
-  assert.equal(PUBLISHER_PIN_ENFORCE,false);
+test('T18 (Paul 2026-10-26): from 1.0.20 the shipped default enforces the publisher pin (1.0.19 was warn-only)',()=>{
+  assert.equal(PUBLISHER_PIN_ENFORCE,true);
 });
 test('T18 warn-only: a pin mismatch warns and proceeds while enforcement is off; the allow-list and release-signing checks still refuse',()=>{
   const filename='C:\Test\Package.exe',signed=thumbprint=>({status:0,thumbprint,path:filename}),off={enforce:false};
@@ -56,10 +56,11 @@ test('T18 warn-only: a pin mismatch warns and proceeds while enforcement is off;
   for(const status of [2,3])assert.throws(()=>run({...signed(PIN),status},[PIN]),/could not be verified/);
   assert.throws(()=>run({...signed(PIN),path:'C:\Other\Package.exe'},[PIN]),/could not be verified/);
   assert.throws(()=>run(signed(PIN),[]),/names no publisher thumbprint/);
-  // The module default (off) behaves the same without options, and console.warn is the log.
+  // Off without a warn callback, console.warn is the log; the module default (on from 1.0.20) refuses the same mismatch.
   const logged=[],realWarn=console.warn;console.warn=message=>logged.push(message);
-  try{verifySignatureResult(signed(OTHER),filename,[OTHER]);}finally{console.warn=realWarn;}
+  try{verifySignatureResult(signed(OTHER),filename,[OTHER],off);}finally{console.warn=realWarn;}
   assert.equal(logged.length,1);
+  assert.throws(()=>verifySignatureResult(signed(OTHER),filename,[OTHER]),/does not name the pinned publisher thumbprint/);
 });
 test('T18 flip: the same mismatches that warn while off block once enforcement is on',()=>{
   const filename='C:\Test\Package.exe',signed=thumbprint=>({status:0,thumbprint,path:filename});

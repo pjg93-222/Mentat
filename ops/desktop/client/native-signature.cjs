@@ -23,8 +23,8 @@ function signatureTimeoutMs(bytes){
 // 2026-10-26: that NEW pin check is warn-only for 1.0.19 (a mismatch is logged and surfaced through the update status
 // and the update proceeds on the manifest allow-list alone). In Mentat, updater.cjs also downgrades every other native
 // check failure (unlisted signer included) to a warning while this flag is false; only a manifest with no allow-list is refused.
-// flip to true in the release after 1.0.19 (Paul ruling 2026-10-26, T18)
-const PUBLISHER_PIN_ENFORCE=false;
+// 1.0.20: flipped to true as ruled (Paul ruling 2026-10-26, T18): a pin mismatch, and every other native check, refuses again.
+const PUBLISHER_PIN_ENFORCE=true;
 function allowList(thumbprints){
   if(!Array.isArray(thumbprints)||!thumbprints.length||!thumbprints.every(value=>typeof value==='string'&&THUMBPRINT.test(value)))
     throw new Error('The signed release manifest names no publisher thumbprint; this installer is refused.');
