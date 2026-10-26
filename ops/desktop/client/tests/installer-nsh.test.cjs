@@ -87,7 +87,7 @@ test('compiled preInit + customInit: TEMP and $INSTDIR for manual, legacy and pe
   const work=fs.mkdtempSync(path.join(os.tmpdir(),'dl-nsis-'));t.after(()=>fs.rmSync(work,{recursive:true,force:true}));
   const log=path.join(work,'result.log');
   const fake=path.join(work,'fake DL'),root=fake+'\\MelangeApplications';   // a space, as in "C:\Users\John Smith\Downloads"
-  const pending=root+'\\updates\\mentat\\pending',setupFolder=(root+'\\updates\\mentat-1.0.19-setup').toLowerCase();
+  const pending=root+'\\updates\\mentat\\pending',setupFolder=(root+'\\updates\\mentat-setup').toLowerCase();
   fs.mkdirSync(pending,{recursive:true});
   const script=({dir,setup,build})=>`Unicode true
 RequestExecutionLevel user
@@ -102,7 +102,7 @@ Var isForceCurrentInstall
 !define DL_ROOT_NAME "MelangeApplications"
 !define DL_UPDATES_NAME "updates"
 !define DL_APP_FOLDER "Mentat-1.0.19"
-!define DL_SETUP_FOLDER "mentat-1.0.19-setup"
+!define DL_SETUP_FOLDER "mentat-setup"
 !define DL_CACHE_FOLDER "mentat"
 !define DL_KNOWN_FOLDER "{374DE290-123F-4565-9164-39C4925E467B}"
 !define DL_MAX_DIR ${dir}
@@ -145,7 +145,7 @@ FunctionEnd
 
   // Manual / first install from the browser: TEMP moves, $INSTDIR is forced, per-user only.
   const manual=run(['/S']);
-  assert.ok(field(manual,'PLUGINSDIR').toLowerCase().startsWith(setupFolder+'\\'),manual);assert.ok(same(field(manual,'TEMP'),root+'\\updates\\mentat-1.0.19-setup'),manual);
+  assert.ok(field(manual,'PLUGINSDIR').toLowerCase().startsWith(setupFolder+'\\'),manual);assert.ok(same(field(manual,'TEMP'),root+'\\updates\\mentat-setup'),manual);
   assert.ok(same(field(manual,'INSTDIR'),root+'\\Mentat-1.0.19'),manual);assert.equal(field(manual,'FORCE'),'1');
   // An old-layout in-place update (--updated, outside the root, not from the pending cache): Paul's PC. Nothing moves.
   const legacy=run(['--updated','/S']);
@@ -186,7 +186,7 @@ SilentInstall silent
 !define DL_ROOT_NAME "MelangeApplications"
 !define DL_UPDATES_NAME "updates"
 !define DL_APP_FOLDER "Mentat-1.0.19"
-!define DL_SETUP_FOLDER "mentat-1.0.19-setup"
+!define DL_SETUP_FOLDER "mentat-setup"
 !define DL_CACHE_FOLDER "mentat"
 !define DL_KNOWN_FOLDER "{374DE290-123F-4565-9164-39C4925E467B}"
 !define DL_MAX_DIR 108

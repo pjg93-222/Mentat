@@ -61,7 +61,7 @@ test('afterPack writes installer.generated.nsh beside win-unpacked, from the one
   const p=packaged(t);await quiet(p.context);
   const file=path.join(p.output,'installer.generated.nsh'),text=fs.readFileSync(file,'utf8');
   assert.equal(text,layout.nsisInclude({product:'Mentat',app:'mentat',version:'1.0.19',installerNsh:path.join(__dirname,'..','installer.nsh')}));
-  assert.match(text,/!define DL_APP_FOLDER "Mentat-1\.0\.19"/);assert.match(text,/!define DL_SETUP_FOLDER "mentat-1\.0\.19-setup"/);assert.match(text,/!define DL_CACHE_FOLDER "mentat"/);
+  assert.match(text,/!define DL_APP_FOLDER "Mentat-1\.0\.19"/);assert.match(text,/!define DL_SETUP_FOLDER "mentat-setup"/);assert.match(text,/!define DL_CACHE_FOLDER "mentat"/);
   assert.ok(fs.existsSync(path.join(__dirname,'..','installer.nsh')),'the included installer.nsh exists');
 });
 

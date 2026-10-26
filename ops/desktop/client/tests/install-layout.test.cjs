@@ -23,7 +23,7 @@ test('naming: every folder name comes from the one config point',()=>{
   assert.equal(layout.appDirectory(D,'Melange','1.0.19'),ROOT+'\\Melange-1.0.19');
   assert.equal(layout.appDirectory(D,'Mentat','1.0.19'),ROOT+'\\Mentat-1.0.19');
   assert.equal(layout.updaterCacheDirectory(D,'mentat'),ROOT+'\\updates\\mentat');
-  assert.equal(layout.setupTempDirectory(D,'mentat','1.0.19'),ROOT+'\\updates\\mentat-1.0.19-setup');
+  assert.equal(layout.setupTempDirectory(D,'mentat','1.0.19'),ROOT+'\\updates\\mentat-setup');
   assert.equal(layout.fill('{product}-{version}-{app}',{product:'P',app:'a',version:'1.2.3'}),'P-1.2.3-a');
   assert.equal(LAYOUT.keepVersions,2);assert.equal(LAYOUT.rollbackFloor,'1.0.19');assert.equal(LAYOUT.maxPath,259);
   assert.ok(Object.isFrozen(LAYOUT));
@@ -31,10 +31,19 @@ test('naming: every folder name comes from the one config point',()=>{
 
 test('nsisInclude defines each value from the config and includes installer.nsh by absolute path',()=>{
   const text=layout.nsisInclude({product:'Mentat',app:'mentat',version:'1.0.19',installerNsh:'C:\\x\\client\\installer.nsh'});
-  for(const line of ['!define DL_ROOT_NAME "MelangeApplications"','!define DL_UPDATES_NAME "updates"','!define DL_APP_FOLDER "Mentat-1.0.19"','!define DL_SETUP_FOLDER "mentat-1.0.19-setup"','!define DL_CACHE_FOLDER "mentat"',
+  for(const line of ['!define DL_ROOT_NAME "MelangeApplications"','!define DL_UPDATES_NAME "updates"','!define DL_APP_FOLDER "Mentat-1.0.19"','!define DL_SETUP_FOLDER "mentat-setup"','!define DL_CACHE_FOLDER "mentat"',
     '!define DL_KNOWN_FOLDER "{374DE290-123F-4565-9164-39C4925E467B}"','!define DL_BUILD_VERSION "1.0.19"','!define DL_MAX_DIR 108','!define DL_MAX_SETUP 88','!include "C:\\x\\client\\installer.nsh"'])
     assert.ok(text.split(/\r?\n/).includes(line),line+'\n'+text);
   assert.equal(LAYOUT.maxPath-LAYOUT.deepestRelativeBudget-1,108);assert.equal(LAYOUT.maxPath-LAYOUT.deepestRelativeBudget-LAYOUT.pluginsDirOverhead-1,88);
+});
+
+test('F2: the versionless setup folder keeps NSIS plugins under Downloads for user names up to 28 characters',()=>{
+  // installer.nsh moves TEMP only when the setup path is <= DL_MAX_SETUP (88); the 1.0.19 name allowed 21 characters.
+  const maxSetup=LAYOUT.maxPath-LAYOUT.deepestRelativeBudget-LAYOUT.pluginsDirOverhead-1;
+  const setup=user=>layout.setupTempDirectory('C:\\Users\\'+user+'\\Downloads','mentat','1.0.19');
+  assert.equal(layout.setupTempDirectory(D,'mentat','9.99.999'),layout.setupTempDirectory(D,'mentat','1.0.19'),'no version in the name');
+  assert.equal(setup('u'.repeat(28)).length<=maxSetup,true);assert.equal(setup('u'.repeat(29)).length<=maxSetup,false);
+  assert.equal(('C:\\Users\\'+'u'.repeat(22)+'\\Downloads\\MelangeApplications\\updates\\'+layout.fill(LAYOUT.legacySetupFolder,{app:'mentat',version:'1.0.19'})).length<=maxSetup,false,'the old name did not fit at 22');
 });
 
 test('downloadsMode is the single switch: only an exec under the Downloads root, in any case',()=>{
@@ -114,13 +123,14 @@ test('sweep does nothing when the root itself is a junction (L3)',async t=>{
   assert.ok(logs.some(m=>/not a plain directory/.test(m)));
 });
 
-test('sweep removes stale setup temp folders but not the current or pending ones',async t=>{
+test('sweep keeps the live versionless setup folder and removes the 1.0.19-style versioned leftovers',async t=>{
   const f=tree(t),updates=path.join(f.root,'updates');
-  for(const name of ['mentat-1.0.18-setup','mentat-1.0.19-setup','mentat-1.0.20-setup','mentat-1.0.21-setup'])f.make(path.join(updates,name));
-  f.make(path.join(updates,'mentat','pending'),['mentat-1.0.21-win32-x64.exe']);f.make(path.join(updates,'melange-1.0.18-setup'));
+  for(const name of ['mentat-1.0.18-setup','mentat-1.0.19-setup','mentat-1.0.20-setup','mentat-1.0.21-setup','mentat-setup'])f.make(path.join(updates,name));
+  f.make(path.join(updates,'mentat','pending'),['mentat-1.0.21-win32-x64.exe']);f.make(path.join(updates,'melange-1.0.18-setup'));f.make(path.join(updates,'melange-setup'));
   await layout.sweep(f.options({state:{pending:{version:'1.0.21'}}}));
-  assert.equal(f.exists(path.join(updates,'mentat-1.0.18-setup')),false);assert.equal(f.exists(path.join(updates,'mentat-1.0.19-setup')),false);
-  assert.equal(f.exists(path.join(updates,'mentat-1.0.20-setup')),true,'current');assert.equal(f.exists(path.join(updates,'mentat-1.0.21-setup')),true,'pending');
+  for(const v of ['1.0.18','1.0.19','1.0.20','1.0.21'])assert.equal(f.exists(path.join(updates,'mentat-'+v+'-setup')),false,v);
+  assert.equal(f.exists(path.join(updates,'mentat-setup')),true,'current and pending share the live folder');
+  assert.equal(f.exists(path.join(updates,'melange-setup')),true,'another app is never touched');
   assert.equal(f.exists(path.join(updates,'mentat','pending','mentat-1.0.21-win32-x64.exe')),true,'the updater cache is not a setup folder');
   assert.equal(f.exists(path.join(updates,'melange-1.0.18-setup')),true,'another app is never touched');
 });
