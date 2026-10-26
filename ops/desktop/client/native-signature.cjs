@@ -1,11 +1,12 @@
 'use strict';
 const path=require('node:path');
+const {THUMBPRINT:PINNED}=require('./publisher-trust.cjs');
 const {execFile}=require('node:child_process');
 
 // Fixed source; the file path is JSON data on stdin, never executable shell text.
-const SCRIPT="$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; $inputData=[Console]::In.ReadToEnd() | ConvertFrom-Json; $signature=Get-AuthenticodeSignature -LiteralPath $inputData.path; [ordered]@{status=[int]$signature.Status; path=$signature.Path; subject=$signature.SignerCertificate.Subject} | ConvertTo-Json -Compress";
+const SCRIPT="$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; $inputData=[Console]::In.ReadToEnd() | ConvertFrom-Json; $signature=Get-AuthenticodeSignature -LiteralPath $inputData.path; [ordered]@{status=[int]$signature.Status; path=$signature.Path; subject=$signature.SignerCertificate.Subject; thumbprint=$signature.SignerCertificate.Thumbprint} | ConvertTo-Json -Compress";
 function verifySignatureResult(result,filename,publisherName){
-  if(!publisherName||result?.status!==0||result.subject!==publisherName||typeof result.path!=='string'||
+  if(!publisherName||result?.status!==0||result.subject!==publisherName||typeof result.thumbprint!=='string'||result.thumbprint.toUpperCase()!==PINNED||typeof result.path!=='string'||
       path.win32.resolve(result.path).toLowerCase()!==path.win32.resolve(filename).toLowerCase())throw new Error('Windows package signature or exact publisher identity could not be verified.');
 }
 async function verifyWindowsPackage(filename,publisherName){
