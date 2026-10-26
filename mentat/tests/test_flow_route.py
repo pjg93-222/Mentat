@@ -1127,7 +1127,7 @@ class CandidateNames(unittest.TestCase):
         return f'{self.CAND}|{name}|REP|2024|{state}|H|01|I|C|C90000009|1 MAIN ST||CITY|{state}|20001\n'
 
     # ------------------------------------------------------------ one rule in every view (Flow, Graph direct, Graph activity)
-    def graph(self, master_lines, names, *, mode='activity', other=(), between=None, seen=None):
+    def graph(self, master_lines, names, *, mode='activity', other=(), between=None, seen=None, folders=None):
         """Graph (graph_data.graph_view) over the shared fixture workbook with its candidate re-keyed to CAND and
         its filed names replaced by `names` (the PAC map's sponsor gets the first). `other` adds Downstream
         Activity rows. The candidate master is `master_lines` (cn24)."""
@@ -1138,6 +1138,9 @@ class CandidateNames(unittest.TestCase):
             master = Path(directory) / 'master'
             (master / 'cn24').mkdir(parents=True)
             (master / 'cn24' / 'cn.txt').write_text(master_lines, encoding='ascii')
+            for folder, text in (folders or {}).items():   # more master files: {'cn26': lines}
+                (master / folder).mkdir()
+                (master / folder / 'cn.txt').write_text(text, encoding='ascii')
             path = Path(directory) / 'Giving.xlsx'
             book = openpyxl.Workbook()
             add_graph_sheets(book)
@@ -1211,6 +1214,13 @@ class CandidateNames(unittest.TestCase):
         self.assertEqual((labels[self.CAND], labels['H4XX02002']), ({'Ann Smith'}, {'Ann Johnson'}))
         self.assertEqual(flow_data.CandidateNames({}, masters=[('2024', {})]).resolve('H4XX02002', 'JOHNSON, ANN')['label'],
                          'Ann Johnson')
+
+    def test_an_unfiltered_one_cycle_graph_reads_its_own_cycles_master_before_a_newer_one(self):
+        """The fixture report is 2025-2026: with no cycle chosen, cn26 names the candidate before the newer cn28,
+        as Flow reads its cycle's file first."""
+        body = self.graph(self.master('JONES, PAT'), ['Candidate One'], mode='direct',
+                          folders={'cn26': self.master('SMITH, ANN'), 'cn28': self.master('ZEDDY, ZOE')})
+        self.assertEqual(self.graph_labels(body)[self.CAND], {'Ann Smith'})
 
     def test_the_graph_cache_reads_a_changed_candidate_master_again(self):
         changed = []

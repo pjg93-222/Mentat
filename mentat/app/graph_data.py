@@ -1373,7 +1373,9 @@ def _graph_view(paths, filters):
     # no direct amount rather than a false one.
     # One candidate ID, one label, in every list here and in Flow (flow_data.CandidateNames).
     names_of = [direct, candidate_rows, *(buckets.values() if buckets is not None else ())]
-    named = named_candidates(names_of, selected['cycle'], also=[ties])
+    # The report's own cycle when it has one and none is chosen, so its candidate master is read first, as in Flow.
+    name_cycle = selected['cycle'] or (years[0] if len(set(years)) == 1 else '')
+    named = named_candidates(names_of, name_cycle, also=[ties])
     direct, candidate_rows, ties = named[0], named[1], named[-1]
     if buckets is not None:
         buckets = dict(zip(buckets, named[2:-1]))
