@@ -191,16 +191,16 @@ def _ccl_mapping(candidate, cycle, ccl_root=None):
         stat = path.stat()
         key = (str(path), stat.st_size, stat.st_mtime_ns, cycle)
         if key not in _CCL:
-            principal = {}
-            for line in path.read_bytes().decode('utf-8', 'replace').splitlines():
+            raw, principal = path.read_bytes(), {}   # one read: the digest names exactly the bytes the mapping came from
+            for line in raw.decode('utf-8', 'replace').splitlines():
                 part = line.strip().split('|')   # CAND_ID|CAND_ELECTION_YR|FEC_ELECTION_YR|CMTE_ID|CMTE_TP|CMTE_DSGN|LINKAGE_ID
                 if len(part) >= 7 and part[2] == str(cycle) and part[5] == 'P' and COMMITTEE.fullmatch(part[3]):
                     principal.setdefault(part[0], set()).add(part[3])
-            _CCL[key] = {name: sorted(ids) for name, ids in principal.items()}
-        sha = _file_sha(path)
+            _CCL[key] = ({name: sorted(ids) for name, ids in principal.items()}, hashlib.sha256(raw).hexdigest())
+        mapping, sha = _CCL[key]
     except OSError:
         return None
-    ids = _CCL[key].get(candidate)
+    ids = mapping.get(candidate)
     if not ids:
         return None
     try:
