@@ -530,3 +530,55 @@ test('main.cjs moves only the updater file root to %LOCALAPPDATA%, leaving the u
   assert.match(main,/legacyUserData:localRoot&&githubConfig\?path\.join\(userData,'github-updates'\):null/,'the pre-move cache stays known to the updater');
   assert.match(main,/readState:\(\)=>read\(githubConfig\?'github-update-state\.json':'update-state\.json'\),writeState:value=>write\(/,'state stays in the profile');
 });
+
+// Downloads layout (install-layout.cjs): the updater hooks. Nothing below applies when installLayout is absent.
+const layoutStub=(extra={})=>({cacheDirectory:'C:\\D\\MelangeApplications\\updates\\terrier',sweep:async()=>{},...extra});
+
+test('layout: the constructor presets electron-updater\'s pending cache; without a layout the updater is untouched',t=>{
+  const f=fixture(t),withLayout=f.client('Fixture Publisher',{installLayout:layoutStub()});
+  assert.equal(withLayout.autoUpdater.downloadedUpdateHelper.cacheDirForPendingUpdate,path.join('C:\\D\\MelangeApplications\\updates\\terrier','pending'));
+  const plain=f.client();assert.equal(plain.autoUpdater.downloadedUpdateHelper,undefined);
+});
+
+test('layout: the pinned electron-updater reuses a preset download helper',async()=>{
+  assert.equal(require('electron-updater/package.json').version,'6.8.9','a bump must re-verify AppUpdater.getOrCreateDownloadHelper');
+  const {AppUpdater}=require('electron-updater'),{DownloadedUpdateHelper}=require('electron-updater/out/DownloadedUpdateHelper');
+  const helper=new DownloadedUpdateHelper('C:\\D\\MelangeApplications\\updates\\terrier');
+  const reused=await AppUpdater.prototype.getOrCreateDownloadHelper.call({downloadedUpdateHelper:helper});
+  assert.equal(reused,helper);assert.equal(helper.cacheDirForPendingUpdate,path.join('C:\\D\\MelangeApplications\\updates\\terrier','pending'));
+});
+
+test('layout: activation never passes /D (the installer derives its folder from where it runs); no layout never touches installDirectory either',async t=>{
+  const f=fixture(t),client=f.client('Fixture Publisher',{installLayout:layoutStub()});client.autoUpdater.installDirectory='sentinel';await client.check();
+  assert.equal(await client.activateAfterClose(),true);assert.equal(client.autoUpdater.installDirectory,'sentinel','the updater leaves installDirectory alone');
+  const h=fixture(t),plain=h.client();plain.autoUpdater.installDirectory='sentinel';await plain.check();
+  assert.equal(await plain.activateAfterClose(),true);assert.equal(plain.autoUpdater.installDirectory,'sentinel');
+});
+
+test('layout: a rollback activates the same way, without /D',async t=>{
+  const f=fixture(t),first=f.client();await first.check();await first.activateAfterClose();
+  f.version='1.1.0';const second=f.client();second.markApplicationReady();await second.check();
+  f.envelope=f.sign('1.2.0',2);await second.check();await second.activateAfterClose();
+  f.version='1.2.0';const third=f.client('Fixture Publisher',{installLayout:layoutStub({rollbackFloor:'1.0.0'})});third.markApplicationReady();await third.check();f.offline=true;
+  assert.equal(await third.beginRecovery(),'1.1.0');assert.equal(await third.activateAfterClose(),true);
+  assert.equal(third.autoUpdater.installDirectory,undefined);
+});
+
+test('layout: rollback below the first Downloads release is refused; without a layout it is accepted',t=>{
+  const f=fixture(t),hash=envelope=>crypto.createHash('sha256').update(Buffer.from(envelope.payload,'base64')).digest('hex');
+  const old=f.sign('1.0.18',1),recovery={target:{version:'1.0.18',envelope:old},manifestHash:hash(old)};
+  assert.throws(()=>f.client('Fixture Publisher',{installLayout:layoutStub()}).verifyRecovery(f.enrollment,recovery),/Rollback below 1\.0\.19 would leave the Downloads layout/);
+  assert.equal(f.client().verifyRecovery(f.enrollment,recovery).manifest.version,'1.0.18');
+  const floor=f.sign('1.0.19',1),allowed={target:{version:'1.0.19',envelope:floor},manifestHash:hash(floor)};
+  assert.equal(f.client('Fixture Publisher',{installLayout:layoutStub()}).verifyRecovery(f.enrollment,allowed).manifest.version,'1.0.19');
+});
+
+test('layout: the sweep runs once when the application is ready, and a failing sweep never throws',async t=>{
+  const f=fixture(t),calls=[];
+  const client=f.client('Fixture Publisher',{installLayout:layoutStub({sweep:async state=>{calls.push(state);throw new Error('sweep failed');}})});
+  client.markApplicationReady();client.markApplicationReady();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.length,1);assert.equal(calls[0].installed.version,'1.0.0','the sweep receives the persisted update state');assert.equal(client.applicationReady,true);
+  const plain=f.client();plain.markApplicationReady();assert.equal(plain.applicationReady,true);
+  const synchronous=f.client('Fixture Publisher',{installLayout:layoutStub({sweep:()=>{throw new Error('sync failure');}})});
+  assert.doesNotThrow(()=>synchronous.markApplicationReady());
+});

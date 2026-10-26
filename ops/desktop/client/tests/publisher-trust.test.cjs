@@ -12,9 +12,16 @@ test('bundled release certificate is the pinned, public, code-signing-only, non-
   assert.ok(!der.toString('latin1').includes('PRIVATE KEY'));assert.ok(der.length<4096);
 });
 
+// Comments and the Downloads-layout names (which legitimately contain "Root") are removed first; everything else is judged by the broad pattern.
+const certificateStoreCode=text=>/certutil|addstore|Root|crypt32|CertAdd|Import-Certificate|TrustedPublisher/i.test(text.replace(/;[^\n]*/g,'').replace(/\b(dlRoot|dlInstdirUnderRoot|DL_ROOT_NAME|DL_TEST_ROOT)\b/g,''));
+test('the installer certificate guard catches the stores it exists to forbid, including AuthRoot',()=>{
+  for(const code of ['crypt32::CertOpenSystemStoreW(i 0, t "AuthRoot")','certutil -addstore Root x.cer','Import-Certificate -CertStoreLocation Cert:\\CurrentUser\\TrustedPublisher','System::Call "crypt32::CertAddCertificateContextToStore"','WriteRegStr HKCU "Software\\Microsoft\\SystemCertificates\\Root\\Certificates"'])
+    assert.ok(certificateStoreCode(code),code);
+  assert.ok(!certificateStoreCode('!insertmacro dlRoot\nStrCpy $R0 "$R0\\${DL_ROOT_NAME}" ; Root in a comment\n!insertmacro dlInstdirUnderRoot'),'the layout names alone are not flagged');
+});
 test('installer no longer imports the certificate; it only keeps an offline rollback copy of itself. Builder and standalone launcher use the pinned certificate in memory',()=>{
   const nsis=fs.readFileSync(path.join(root,'installer.nsh'),'utf8');
-  assert.ok(!/certutil|addstore|Root/i.test(nsis.replace(/;[^\n]*/g,'')),'no certificate import in the installer, no elevation');
+  assert.ok(!certificateStoreCode(nsis),'no certificate import in the installer, no elevation');
   const install=nsis.slice(nsis.indexOf('!macro customInstall'),nsis.indexOf('!macroend'));
   assert.match(install,/\$\{IfNot\} \$\{isUpdated\}\s+\$\{AndIfNot\} \$\{Silent\}\s+\$\{AndIf\} \$installMode == "CurrentUser"/,'per-user installs only');
   assert.ok(install.includes('CopyFiles /SILENT "$EXEPATH" "$LOCALAPPDATA\\${APP_ID}\\baseline\\${VERSION}\\$EXEFILE"'));
