@@ -256,6 +256,25 @@ def name_words(name):
     return {word for word in letters + [a + b for a, b in zip(letters, letters[1:])] if len(word) >= 3}
 
 
+def named_candidate_id(masters, cycle, name, office, state):
+    """The one FEC candidate-master ID whose surname shares a word with the filed name's surname (the part before
+    the comma), whose office letter (H, S, P) is `office` and whose office state is `state`; '' when none or more than
+    one does, or when the filing states no office or state. The file of the flow's cycle answers when there is one,
+    else every file on disk. A label lookup only: no amount is read or moved."""
+    text = str(name or '').strip()
+    surname = name_words(text.partition(',')[0] if ',' in text else text.rsplit(' ', 1)[-1])
+    office, state = str(office or '').strip().upper()[:1], str(state or '').strip().upper()
+    if not (surname and office and state):
+        return ''
+    mine = [names for year, names in masters if year == str(cycle or '')]
+    found = set()
+    for names in (mine or [names for _year, names in masters]):
+        for candidate, (master_name, master_state) in names.items():
+            if candidate[:1] == office and master_state == state and name_words(master_name.partition(',')[0]) & surname:
+                found.add(candidate)
+    return next(iter(found)) if len(found) == 1 else ''
+
+
 SMALL_WORDS = frozenset({'OF', 'AND', 'THE', 'FOR', 'TO', 'IN', 'ON', 'AT', 'BY', 'AN', 'OR', 'A', 'AS'})
 KEEP_UPPER = frozenset({'PAC', 'LLC', 'LP', 'LLP', 'USA', 'US', 'II', 'III', 'IV', 'NA', 'DC', 'JFC', 'NRSC', 'DSCC',
                         'DCCC', 'NRCC', 'RNC', 'DNC', 'AFL', 'CIO', 'SEIU', 'UAW', 'IBEW', 'AFSCME', 'NEA', 'AFT'})
@@ -772,8 +791,8 @@ def committee_flow(committee, cycle, *, identifier='', depth=DEFAULT_DEPTH, root
     for row in activity:
         if row['cycle'] == cycle:
             by_committee[row['committee']].append(row)
-    parties, spelled, state_of, filed_name = {}, defaultdict(list), {}, {}
-    for unit in found['units'].values():
+    parties, spelled, state_of, filed_name, filed_row = {}, defaultdict(list), {}, {}, {}
+    for unit_key, unit in found['units'].items():
         for schedule in ('expenditures', 'disbursements'):
             for row in unit.get(schedule) or []:
                 candidate = str(row.get('candidate_id') or '')
@@ -786,12 +805,14 @@ def committee_flow(committee, cycle, *, identifier='', depth=DEFAULT_DEPTH, root
                 state_of[str(row.get('sub_id') or '')] = filed_state
                 if str(row.get('candidate_name') or '').strip():
                     filed_name[str(row.get('sub_id') or '')] = str(row['candidate_name']).strip()
+                    filed_row[str(row.get('sub_id') or '')] = (unit_key[1], row)
                 if row.get('candidate_name'):
                     spelled[candidate].append(
                         (str(row['candidate_name']).strip(), filed_state,
                          dec(row.get('expenditure_amount') if schedule == 'expenditures' else row.get('disbursement_amount'))))
     masters = candidate_master(cycle)
     drawn_filings = defaultdict(list)       # candidate node id -> the filings behind its drawn links
+    link_filings = defaultdict(set)         # (source, target, kind) of a link into a candidate -> its filings' sub_ids
 
     def home_state(candidate):
         return candidate[2:4] if candidate[:1] in ('H', 'S') else ''
@@ -956,11 +977,14 @@ def committee_flow(committee, cycle, *, identifier='', depth=DEFAULT_DEPTH, root
                         else 'Own ads for and against candidates', committee_id=ident)
                 bucket = own_buckets[bucket_kind]
                 graph.link(node['id'], bucket['id'], value, kind, len(filings), [], committee=ident)
-                graph.link(bucket['id'], target['id'], value, kind, len(filings), evidence[:EVIDENCE_LIMIT],
-                           committee=ident, **extra)
+                ribbon = graph.link(bucket['id'], target['id'], value, kind, len(filings), evidence[:EVIDENCE_LIMIT],
+                                    committee=ident, **extra)
             else:
-                graph.link(node['id'], target['id'], value, kind, len(filings), evidence[:EVIDENCE_LIMIT],
-                           committee=ident, **extra)
+                ribbon = graph.link(node['id'], target['id'], value, kind, len(filings), evidence[:EVIDENCE_LIMIT],
+                                    committee=ident, **extra)
+            if row['candidate_id'] and ribbon:
+                link_filings[(ribbon['source'], ribbon['target'], ribbon['kind'])].update(
+                    record['sub_id'] for record in filings)
         inbound = [link for link in graph.links.values() if link['target'] == node['id']]
         if item is None:
             # No usable summary: what arrived and was not spent onward is not yet traced.
@@ -1044,16 +1068,33 @@ def committee_flow(committee, cycle, *, identifier='', depth=DEFAULT_DEPTH, root
             parts['cash'] += item['cash_end']
             parts['held'] += item['held']
             parts['refunded_to_donors'] += item['donor_refunds'] + item['refunds_to_donors']
-    # What was filed under a candidate ID in another person's name, among the filings behind the links drawn into the
-    # node: a row whose own candidate_name shares no word with the label (a payee name is no candidate name).
+    # A filing under a candidate ID that names another candidate, among the filings behind the links drawn into the
+    # node: a row whose own candidate_name shares no word with the label (a payee name is no candidate name). The money
+    # stays on the node FEC filed it under; this is a note about the filing, listed and counted, and moves nothing.
     for node_id, records in drawn_filings.items():
-        shown = name_words(graph.nodes[node_id]['name_as_filed'])
-        elsewhere = [{'name': filed_name[record['sub_id']], 'office_state': state_of.get(record['sub_id'], ''),
-                      'amount': record['amount'], 'sub_id': record['sub_id']}
-                     for record in records
-                     if record['sub_id'] in filed_name and not name_words(filed_name[record['sub_id']]) & shown]
-        if elsewhere:
-            graph.nodes[node_id]['filed_as_other'] = elsewhere
+        target = graph.nodes[node_id]
+        shown = name_words(target['name_as_filed'])
+        notes, seen = [], set()
+        for record in records:
+            sub_id = record['sub_id']
+            if sub_id in seen or sub_id not in filed_name or name_words(filed_name[sub_id]) & shown:
+                continue
+            seen.add(sub_id)
+            filer, raw = filed_row[sub_id]
+            office = str(raw.get('candidate_office') or '').strip().upper()[:1] or target['candidate_id'][:1]
+            notes.append({'kind': 'cross_candidate_filing', 'sub_id': sub_id, 'amount': record['amount'],
+                          'date': record['date'], 'filer_committee_id': filer,
+                          'filed_candidate_id': target['candidate_id'],
+                          'filed_committee_id': str(raw.get('recipient_committee_id') or ''),
+                          'named_recipient': filed_name[sub_id], 'named_office_state': state_of.get(sub_id, ''),
+                          'named_recipient_committee': str(raw.get('recipient_name') or ''),
+                          'named_candidate_id': named_candidate_id(masters, cycle, filed_name[sub_id], office,
+                                                                   state_of.get(sub_id, ''))})
+        if notes:
+            target['cross_candidate_filings'] = notes
+            for link_key, subs in link_filings.items():
+                if link_key[1] == node_id and any(note['sub_id'] in subs for note in notes):
+                    graph.links[link_key]['cross_candidate_filings'] = [note for note in notes if note['sub_id'] in subs]
     # ------------------------------------------------------------ the last column's balance sinks
     kept = [ident for ident, parts in kept_parts.items()
             if parts.get('operating', ZERO) + parts.get('cash', ZERO) + parts.get('held', ZERO) > 0]
@@ -1207,6 +1248,8 @@ def group(nodes, links, top, min_share=MIN_SHARE):
         entry['value'] += link['value']
         entry['rows'] += link['rows']
         entry['evidence'] = (entry['evidence'] + list(link.get('evidence') or []))[:EVIDENCE_LIMIT]
+        if link.get('cross_candidate_filings'):
+            entry['cross_candidate_filings'] = list(entry.get('cross_candidate_filings') or []) + link['cross_candidate_filings']
         if entry.get('committee') != link.get('committee'):
             entry.pop('committee', None)
         if link.get('date_unverified') or entry.get('date_unverified'):
@@ -1439,7 +1482,20 @@ def _link_out(link):
     for key in ('committee', 'date_unverified', 'evidence_url'):
         if link.get(key) is not None:
             out[key] = link[key]
+    if link.get('cross_candidate_filings'):
+        out['cross_candidate_filings'] = link['cross_candidate_filings']
     return out
+
+
+def cross_candidate_summary(nodes):
+    """The flow's filings that name another candidate than the ID they were filed under, from every candidate node of
+    the ungrouped graph: {count, amount, items}, each item a node's entry with the node's id and label. The amount is
+    the sum of the filings, which stay in the totals of the node FEC filed them under."""
+    items = [{**note, 'node': node['id'], 'node_label': node['label']}
+             for node in nodes.values() for note in node.get('cross_candidate_filings') or []]
+    items.sort(key=lambda item: (-(item['amount'] or 0), item['sub_id']))
+    return {'count': len(items), 'amount': cents(sum((Decimal(str(item['amount'] or 0)) for item in items), ZERO)),
+            'items': items}
 
 
 def routes_of(built, limit=10):
@@ -1792,6 +1848,7 @@ def _answer(prepared, top, depth, industry, build_stamp):
         'nodes': [_node_out(node) for node in grouped_nodes.values()],
         'links': [_link_out(link) for link in grouped_links],
         'routes': shared['routes'], 'totals': shared['totals'],
+        **({'cross_candidate_filings': shared['cross_candidate_filings']} if 'cross_candidate_filings' in shared else {}),
         'coverage': shared['coverage'],
         'reconciliation': reconciliation,
         'carryover': shared['carryover'],
@@ -1882,6 +1939,9 @@ def _prepare(committee, cycle, identifier, depth, root, evidence_view=None):
         'carryover': carry_summary(built['found']),
         'notes': notes_of(built, totals),
     })
+    cross = cross_candidate_summary(nodes)
+    if cross['count']:                      # absent when there is none, so the contract's examples stay as they are
+        prepared['shared']['cross_candidate_filings'] = cross
     return prepared
 
 

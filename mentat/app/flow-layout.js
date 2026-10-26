@@ -388,6 +388,7 @@
       entry.cents += link.cents;
       entry.rows = (entry.rows || 0) + (link.rows || 0);
       entry.evidence = entry.evidence.concat(link.evidence || []).slice(0, 12);
+      if (link.cross_candidate_filings) entry.cross_candidate_filings = (entry.cross_candidate_filings || []).concat(link.cross_candidate_filings);
       if (entry.committee !== link.committee) delete entry.committee;
       if (link.date_unverified || entry.date_unverified) entry.date_unverified = true;
     }
@@ -588,6 +589,7 @@
       entry.cents += link.cents;
       entry.rows = (entry.rows || 0) + (link.rows || 0);
       entry.evidence = entry.evidence.concat(link.evidence || []).slice(0, 12);
+      if (link.cross_candidate_filings) entry.cross_candidate_filings = (entry.cross_candidate_filings || []).concat(link.cross_candidate_filings);
       if (entry.committee !== link.committee) delete entry.committee;
       if (link.date_unverified) entry.date_unverified = true;
     }
