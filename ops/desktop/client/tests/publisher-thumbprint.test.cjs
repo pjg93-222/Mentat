@@ -10,14 +10,14 @@ let signer={status:0,thumbprint:PIN},signatureCalls=0;
 // Installed before updater.cjs loads, so native-signature.cjs binds this double. Each test file runs in its own process.
 childProcess.execFile=(file,args,options,callback)=>{
   signatureCalls++;
-  return {stdin:{on(){},end(input){const {path:target}=JSON.parse(input);process.nextTick(()=>callback(null,JSON.stringify({status:signer.status,path:target,thumbprint:signer.thumbprint}),''));}}};
+  return {stdin:{on(){},end(input){const {path:target}=JSON.parse(input);process.nextTick(()=>signer.unavailable?callback(Object.assign(new Error('spawn powershell.exe ENOENT'),{code:'ENOENT'}),'',''):callback(null,JSON.stringify({status:signer.status,path:target,thumbprint:signer.thumbprint}),''));}}};
 };
 const platform=Object.getOwnPropertyDescriptor(process,'platform');
 Object.defineProperty(process,'platform',{...platform,value:'win32'});
 const {DesktopUpdater}=require('../updater.cjs');
 const {verifyEnvelope}=require('../trust.cjs');
 
-function fixture(t,{thumbprints=[PIN]}={}){
+function fixture(t,{thumbprints=[PIN],enforce=true}={}){
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'desktop-thumbprint-'));
   t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
   signer={status:0,thumbprint:PIN};signatureCalls=0;
@@ -39,7 +39,7 @@ function fixture(t,{thumbprints=[PIN]}={}){
       async checkForUpdates(){const m=JSON.parse(Buffer.from(f.state.pending.envelope.payload,'base64'));return {updateInfo:{version:m.version,files:[m.package]}};},
       async downloadUpdate(){const staged=path.join(directory,'native.exe');fs.writeFileSync(staged,bytes);return [staged];},
       quitAndInstall(){this.quitAndInstallCalled=true;f.installs++;}};
-    const updater=new DesktopUpdater({appId:'terrier',version:f.version,userData:directory,platform:'win32',arch:'x64',publisherName:'Fixture Publisher',packaged:true,autoUpdater:native,
+    const updater=new DesktopUpdater({enforcePublisher:enforce,appId:'terrier',version:f.version,userData:directory,platform:'win32',arch:'x64',publisherName:'Fixture Publisher',packaged:true,autoUpdater:native,
       loadEnrollment:()=>enrollment,saveEnrollment(){},readState:()=>structuredClone(f.state),writeState:value=>{f.state=structuredClone(value);},onStatus:message=>f.status.push(message),
       makeFeed:async()=>({url:'http://127.0.0.1/fixture/',close(){}}),
       request:async(p,url)=>{if(url.endsWith('/trust'))return {transitions:[]};if(url.includes('/recovery?'))return seed;if(url==='/v1/status')return {};return f.envelope;},
@@ -119,7 +119,7 @@ test('publisherThumbprints must be a non-empty list of 40 uppercase hex digits w
 });
 
 test('T18 warn-only (Paul 2026-10-26): a manifest that does not name the pinned publisher still installs for 1.0.19 and the update status carries the warning',async t=>{
-  const f=fixture(t,{thumbprints:[OTHER]});signer={status:4,thumbprint:OTHER};
+  const f=fixture(t,{thumbprints:[OTHER],enforce:false});signer={status:4,thumbprint:OTHER};
   const realWarn=console.warn;console.warn=()=>{};
   try{const client=f.client();await client.check();
     assert.equal(f.state.pending.phase,'prepared');assert.equal(await client.activateAfterClose(),true);assert.equal(f.installs,1);
@@ -130,4 +130,47 @@ test('T18 warn-only (Paul 2026-10-26): a manifest that does not name the pinned 
 test('main.cjs does not disable the installer publisher check (the default native-signature.cjs runs)',()=>{
   const main=fs.readFileSync(path.join(__dirname,'..','main.cjs'),'utf8');
   assert.doesNotMatch(main,/verifyNativePackage:/);
+});
+
+// Mentat never ran native verification before 1.0.19: while PUBLISHER_PIN_ENFORCE is false every native failure warns and
+// proceeds (status + console.warn), never wedges the client, and the next check() sees a newer release.
+const quiet=async fn=>{const real=console.warn,seen=[];console.warn=m=>seen.push(m);try{await fn();}finally{console.warn=real;}return seen;};
+const warned=f=>f.status.filter(message=>/^Update publisher warning/.test(message));
+test('warn-only: the 1.0.19 confirm step (recover) proceeds when Authenticode fails, clears pending, and the next check sees a newer version',async t=>{
+  const f=fixture(t,{enforce:false});
+  await quiet(async()=>{
+    const first=f.client();await first.check();assert.equal(f.state.pending.phase,'prepared');
+    signer={status:2,thumbprint:null};// Authenticode now fails (NotSigned)
+    assert.equal(await first.activateAfterClose(),true);assert.equal(f.installs,1);// install-on-close proceeds
+    f.version='1.1.0';const upgraded=f.client();upgraded.markApplicationReady();await upgraded.check();// confirm step
+    assert.equal(f.state.pending,null);assert.equal(f.state.installed.version,'1.1.0');assert.equal(f.state.verifyFailure,undefined);
+    f.envelope=f.sign('1.2.0',3);await upgraded.check();// not stalled: a newer release stages
+    assert.equal(f.state.pending.phase,'prepared');assert.equal(JSON.parse(Buffer.from(f.state.pending.envelope.payload,'base64')).version,'1.2.0');
+  });
+  assert.ok(warned(f).length>=1,f.status.join(' | '));
+});
+test('warn-only: the signature tool being unavailable warns and proceeds instead of retrying forever',async t=>{
+  const f=fixture(t,{enforce:false});signer={unavailable:true};
+  const seen=await quiet(async()=>{
+    const client=f.client();await client.check();
+    assert.equal(f.state.pending.phase,'prepared');assert.equal(f.state.signatureUnavailableReported,undefined);
+    assert.equal(await client.activateAfterClose(),true);assert.equal(f.installs,1);
+    f.version='1.1.0';const upgraded=f.client();upgraded.markApplicationReady();await upgraded.check();
+    assert.equal(f.state.pending,null);assert.equal(f.state.installed.version,'1.1.0');
+    f.envelope=f.sign('1.2.0',3);await upgraded.check();assert.equal(f.state.pending.phase,'prepared');
+  });
+  assert.ok(seen.length>=1);assert.equal(warned(f).filter(m=>/verification failed/.test(m)).length,2,'one warning per updater instance (first and upgraded), not one per verification call');
+});
+test('warn-only: Ed25519 and sha256/512 stay hard (a tampered installer is still refused)',async t=>{
+  const f=fixture(t,{enforce:false});f.payload=Buffer.from('tampered');signer={status:2,thumbprint:null};
+  await quiet(()=>refusedAndStillRunning(f,f.client(),/./));
+});
+test('enforcement on: the same Authenticode failure and tool-unavailable cases block',async t=>{
+  const f=fixture(t,{enforce:true});signer={status:2,thumbprint:null};
+  await refusedAndStillRunning(f,f.client(),/could not be verified/);
+  const g=fixture(t,{enforce:true});signer={unavailable:true};
+  await g.client().check();
+  assert.ok(g.state.signatureUnavailableReported,'deferred for a local retry, not installed');assert.notEqual(g.state.pending?.phase,'prepared');
+  const h=fixture(t,{enforce:true});const client=h.client();await client.check();
+  signer={status:2,thumbprint:null};assert.equal(await client.activateAfterClose(),false);assert.equal(h.installs,0);
 });

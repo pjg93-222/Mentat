@@ -4,7 +4,7 @@ const path=require('node:path');
 const http=require('node:http');
 const crypto=require('node:crypto');
 const semver=require('semver');
-const {verifyWindowsPackage}=require('./native-signature.cjs');
+const {verifyWindowsPackage,PUBLISHER_PIN_ENFORCE}=require('./native-signature.cjs');
 const {jsonRequest,verifyEnvelope,applyKeyTransitions,downloadVerified,verifyPackageFile}=require('./trust.cjs');
 const {LAYOUT}=require('./install-layout.cjs');
 const VERIFY_RETRY_MS=6*60*60*1000;
@@ -33,6 +33,10 @@ class DesktopUpdater {
     this.platform=options.platform||process.platform;this.arch=options.arch||process.arch;
     this.request=options.request||jsonRequest;this.download=options.download||downloadVerified;
     this.verifyNativePackage=options.verifyNativePackage||verifyWindowsPackage;
+    // Mentat never ran native verification before 1.0.19, so until PUBLISHER_PIN_ENFORCE is flipped every native publisher
+    // failure (allow-list, Authenticode status, path, tool unavailable or timed out) warns and proceeds. Ed25519 and
+    // sha256/sha512 are checked separately in verifyPackageFile and stay hard.
+    this.enforcePublisher=options.enforcePublisher??PUBLISHER_PIN_ENFORCE;this.publisherWarned=new Set();
     this.makeFeed=options.makeFeed||verifiedFeed;this.busy=false;this.feed=null;this.ready=null;
     this.autoUpdater.autoDownload=false;this.autoUpdater.autoInstallOnAppQuit=false;
     this.autoUpdater.allowDowngrade=false;this.autoUpdater.disableDifferentialDownload=true;
@@ -75,7 +79,13 @@ class DesktopUpdater {
     if(this.platform!=='win32')throw new Error('This release supports verified Windows activation only.');
     // The publisher decision is the installer signer's thumbprint against the signed manifest's allow-list; a manifest
     // without one (published before thumbprint pinning) is refused by verifyWindowsPackage, failing closed.
-    await this.verifyNativePackage(filename,manifest.publisherThumbprints,{warn:message=>this.onStatus(message)});
+    const warn=message=>{if(this.publisherWarned.has(message))return;this.publisherWarned.add(message);this.onStatus(message);};
+    try{await this.verifyNativePackage(filename,manifest.publisherThumbprints,{enforce:this.enforcePublisher,warn});}
+    catch(error){
+      if(this.enforcePublisher)throw error;
+      const message='Update publisher warning: the native publisher check did not pass ('+error.message+'). This release still installs; the next release will refuse it.';
+      if(!this.publisherWarned.has(message))console.warn(message);warn(message);
+    }
     await verifyPackageFile(filename,manifest);
   }
   async ensureRecoveryBaseline(enrollment,fetch=true){
