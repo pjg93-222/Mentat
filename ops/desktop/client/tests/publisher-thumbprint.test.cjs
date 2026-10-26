@@ -64,6 +64,13 @@ test('a signer thumbprint in the manifest allow-list installs, even when Windows
   assert.equal(await client.activateAfterClose(),true);assert.equal(f.installs,1);
 });
 
+test('LAUNCH F5: enforced, a wrong thumbprint on an untrusted chain is refused even when the manifest lists it',async t=>{
+  for(const status of [1,4]){
+    const f=fixture(t,{enforce:true,thumbprints:[PIN,OTHER]});signer={status,thumbprint:OTHER};
+    await refusedAndStillRunning(f,f.client(),/pinned publisher thumbprint could not be verified/);
+  }
+});
+
 test('an unsigned installer is refused',async t=>{
   const f=fixture(t);signer={status:2,thumbprint:null};
   await refusedAndStillRunning(f,f.client(),/Update deferred: Windows package signature or pinned publisher thumbprint could not be verified/);
