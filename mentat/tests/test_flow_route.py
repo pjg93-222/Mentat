@@ -1081,5 +1081,186 @@ class CommitteeNames(unittest.TestCase):
             self.assertNotIn('unnamed', node)
 
 
+class CandidateNames(unittest.TestCase):
+    """A candidate node is placed by the FEC candidate master and named by the filed spellings the master agrees
+    with. Coinbase PAC filed "ROSEN, JACKY" (NV) under Deb Fischer's S2NE00094; the alphabet picked ROSEN. The
+    master is the legal name ("James Johnson" for Mike Johnson), so it chooses among the filed spellings and is the
+    label only when none agrees. Labels and state only: the node's dollars and the reconciliation do not move."""
+    CAND = 'H4XX01001'
+    NODE = 'candidate:H4XX01001:contribution'
+    ROWS = (('k1', 'SMITH, ANN', 'XX', 2500.0), ('k2', 'ZEDDY, ZOE', 'YY', 1000.0))
+
+    def units(self, rows=ROWS):
+        units = fixture_units()
+        for unit in units:                                  # the base scenario's own SMITH rows move to another ID
+            for schedule in ('disbursements', 'expenditures'):
+                for row in unit[schedule]:
+                    if row.get('candidate_id') == self.CAND:
+                        row['candidate_id'] = 'H4XX09009'
+        for sub_id, name, state, value in rows:
+            row = payment(sub_id, 'SMITH FOR CONGRESS', value, '2023-10-02', line='23', kind='24K',
+                          committee='C90000009', candidate=self.CAND)
+            row.update(candidate_name=name, candidate_office_state=state)
+            units[1]['disbursements'].append(row)
+        return units
+
+    def flow(self, master_lines=None, rows=ROWS):
+        with tempfile.TemporaryDirectory() as directory:
+            master = Path(directory) / 'master'
+            master.mkdir()
+            if master_lines is not None:
+                (master / 'cn24').mkdir()
+                (master / 'cn24' / 'cn.txt').write_text(master_lines, encoding='ascii')
+            write_fixture(directory, self.units(rows))
+            saved, flow_data.CANDIDATE_MASTER_ROOT = flow_data.CANDIDATE_MASTER_ROOT, master
+            flow_data._CACHE.clear()
+            try:
+                return produce(directory)
+            finally:
+                flow_data.CANDIDATE_MASTER_ROOT = saved
+                flow_data._CACHE.clear()
+
+    def received(self, body):
+        return sum(item['value'] for item in body['links'] if item['target'] == self.NODE)
+
+    def master(self, name, state='XX'):
+        return f'{self.CAND}|{name}|REP|2024|{state}|H|01|I|C|C90000009|1 MAIN ST||CITY|{state}|20001\n'
+
+    def test_the_master_places_the_node_and_the_mixed_filing_is_disclosed(self):
+        body = self.flow(self.master('SMITH, ANNABELLE ROSE'))
+        node = by_id(body)[self.NODE]
+        self.assertEqual((node['label'], node['state'], node['candidate_id']), ('Ann Smith', 'XX', self.CAND))
+        self.assertEqual(node['name_as_filed'], 'SMITH, ANN', 'a filed spelling agrees, so the legal name is not shown')
+        self.assertNotIn('name_master', node)
+        self.assertEqual(node['cross_candidate_filings'], [self.note('k2')])
+        self.assertEqual(self.received(body), 3500.0)
+        self.assertTrue(body['reconciliation']['equal'])
+
+    def note(self, sub_id='k2', named_id='', name='ZEDDY, ZOE', state='YY', amount=1000.0):
+        return {'kind': 'cross_candidate_filing', 'sub_id': sub_id, 'amount': amount, 'date': '2023-10-02',
+                'filer_committee_id': BRIDGE_ID, 'filed_candidate_id': self.CAND, 'filed_committee_id': 'C90000009',
+                'named_recipient': name, 'named_office_state': state, 'named_recipient_committee': 'SMITH FOR CONGRESS',
+                'named_candidate_id': named_id}
+
+    def test_a_filing_that_names_another_candidate_is_a_tracked_note_on_the_node_the_link_and_the_flow(self):
+        """Kept where FEC filed it: the note is listed and counted, and the node, link and reconciliation money
+        do not move. The named candidate resolves to the one master candidate with that surname, office and state."""
+        zeddy = 'H4YY05005|ZEDDY, ZOE|DEM|2024|YY|H|05|C|C|C90000010|1 MAIN ST||CITY|YY|20001\n'
+        resolved = self.flow(self.master('SMITH, ANN') + zeddy)
+        plain = self.flow(self.master('SMITH, ANN'))
+        node = by_id(resolved)[self.NODE]
+        self.assertEqual(node['cross_candidate_filings'], [self.note(named_id='H4YY05005')])
+        into = [item for item in resolved['links'] if item['target'] == self.NODE]
+        self.assertEqual([item['cross_candidate_filings'] for item in into], [[self.note(named_id='H4YY05005')]])
+        self.assertEqual(into[0]['value'], 3500.0, 'the link still carries both filings')
+        flow = resolved['cross_candidate_filings']
+        self.assertEqual((flow['count'], flow['amount']), (1, 1000.0))
+        self.assertEqual(flow['items'], [{**self.note(named_id='H4YY05005'), 'node': self.NODE, 'node_label': 'Ann Smith'}])
+        for key in ('totals', 'reconciliation'):
+            self.assertEqual(resolved[key], plain[key])
+        self.assertEqual(self.received(resolved), 3500.0)
+        self.assertEqual([(item['source'], item['target'], item['value']) for item in resolved['links']],
+                         [(item['source'], item['target'], item['value']) for item in plain['links']])
+
+    def test_the_named_candidate_is_blank_when_the_master_has_none_or_more_than_one_or_another_office(self):
+        def named(extra):
+            return by_id(self.flow(self.master('SMITH, ANN') + extra))[self.NODE]['cross_candidate_filings'][0]['named_candidate_id']
+        line = 'H4YY0500%d|ZEDDY, ZOE|DEM|2024|YY|H|05|C|C|C90000010|1 MAIN ST||CITY|YY|20001\n'
+        self.assertEqual(named(''), '', 'not in the master')
+        self.assertEqual(named(line % 5 + line % 6), '', 'two candidates share the surname, office and state')
+        self.assertEqual(named('S4YY00009|ZEDDY, ZOE|DEM|2024|YY|S|00|C|C|C90000010|1 MAIN ST||CITY|YY|20001\n'), '',
+                         'a senator is not a House candidate')
+        self.assertEqual(named(line.replace('YY|H', 'ZZ|H') % 5), '', 'another state')
+        self.assertEqual(named(line % 5 + 'H4YY05006|OTHER, OLLIE|DEM|2024|YY|H|05|C|C|C90000010|1 MAIN ST||CITY|YY|20001\n'),
+                         'H4YY05005', 'one match among other candidates')
+
+    def test_a_node_with_no_other_name_has_no_note_and_the_flow_has_no_summary(self):
+        body = self.flow(self.master('SMITH, ANN'), rows=(('k1', 'SMITH, ANN', 'XX', 2500.0),))
+        self.assertNotIn('cross_candidate_filings', by_id(body)[self.NODE])
+        self.assertTrue(all('cross_candidate_filings' not in item for item in body['links']))
+        self.assertNotIn('cross_candidate_filings', body, 'absent when there is none, so the contract examples hold')
+
+    def test_the_master_places_the_node_but_does_not_rename_a_filed_nickname(self):
+        body = self.flow(self.master('SMITH, ANNABELLE ROSE', 'YY'), rows=(('k1', 'SMITH, ANN', 'XX', 2500.0),))
+        node = by_id(body)[self.NODE]
+        self.assertEqual((node['label'], node['state']), ('Ann Smith', 'YY'))
+        self.assertNotIn('name_master', node)
+        self.assertNotIn('cross_candidate_filings', node)
+
+    def test_the_master_is_the_label_when_no_filed_spelling_agrees_with_it(self):
+        body = self.flow(self.master('JONES, PAT'))
+        node = by_id(body)[self.NODE]
+        self.assertEqual((node['label'], node['state'], node['name_as_filed'], node['name_master']),
+                         ('Pat Jones', 'XX', 'JONES, PAT', '2024'))
+        self.assertEqual([item['named_recipient'] for item in node['cross_candidate_filings']], ['SMITH, ANN', 'ZEDDY, ZOE'])
+        self.assertEqual(self.received(body), 3500.0)
+
+    def test_the_master_names_a_node_whose_rows_carry_no_candidate_name_and_a_payee_name_is_no_other_filing(self):
+        """A row with no candidate_name falls back to its payee ("Senate Eagle PAC" for Bill Hagerty): the master
+        names it, and that payee name is never listed as filed under another candidate."""
+        node = by_id(self.flow(self.master('SMITH, ANN'), rows=(('k1', None, 'XX', 2500.0), ('k2', None, 'XX', 1000.0))))[self.NODE]
+        self.assertEqual((node['label'], node['name_master']), ('Ann Smith', '2024'))
+        self.assertNotIn('cross_candidate_filings', node)
+        mixed = by_id(self.flow(self.master('SMITH, ANN'), rows=(('k1', 'SMITH, ANN', 'XX', 2500.0), ('k2', None, 'XX', 1000.0))))
+        self.assertNotIn('cross_candidate_filings', mixed[self.NODE])
+        self.assertNotIn('name_master', mixed[self.NODE])
+
+    def test_a_married_or_compound_filed_name_is_not_another_candidate(self):
+        rows = (('k1', 'HINSON, ASHLEY', 'XX', 2500.0), ('k2', 'ARENHOLZ, ASHLEY HINSON', 'XX', 1000.0),
+                ('k3', "O'BRIEN-HINSON, ASHLEY", 'XX', 500.0))
+        node = by_id(self.flow(self.master('ARENHOLZ, ASHLEY HINSON'), rows=rows))[self.NODE]
+        self.assertEqual(node['name_as_filed'], 'ARENHOLZ, ASHLEY HINSON')       # the master's own surname part wins
+        self.assertNotIn('name_master', node)
+        self.assertNotIn('cross_candidate_filings', node)
+        only = by_id(self.flow(self.master('ARENHOLZ, ASHLEY HINSON'), rows=rows[:1]))[self.NODE]
+        self.assertEqual((only['name_as_filed'], 'cross_candidate_filings' in only), ('HINSON, ASHLEY', False))
+
+    def test_a_shared_given_name_is_not_agreement_with_the_master(self):
+        """'JOHNSON, ANN' filed under SMITH, ANN's ID shares only the given name: the master labels the node and the
+        filing is disclosed as naming another candidate."""
+        body = self.flow(self.master('SMITH, ANN'), rows=(('k1', 'JOHNSON, ANN', 'XX', 2500.0),))
+        node = by_id(body)[self.NODE]
+        self.assertEqual((node['label'], node['name_as_filed'], node['name_master']), ('Ann Smith', 'SMITH, ANN', '2024'))
+        self.assertEqual([item['named_recipient'] for item in node['cross_candidate_filings']], ['JOHNSON, ANN'])
+        self.assertFalse(flow_data.same_person('SMITH, JAMES', 'JOHNSON, JAMES'))
+        self.assertTrue(flow_data.same_person('HINSON, ASHLEY', 'ARENHOLZ, ASHLEY HINSON'))
+
+    def test_without_a_master_the_rows_filed_in_the_ids_own_state_name_the_node(self):
+        """Same name length and one vote each: today's alphabetical tie-break gives ZEDDY here."""
+        reference = self.flow(self.master('SMITH, ANN'))
+        body = self.flow()
+        node = by_id(body)[self.NODE]
+        self.assertEqual((node['label'], node['state']), ('Ann Smith', 'XX'))
+        self.assertNotIn('name_master', node)
+        self.assertEqual([item['named_recipient'] for item in node['cross_candidate_filings']], ['ZEDDY, ZOE'])
+        self.assertEqual(self.received(body), 3500.0)
+        self.assertEqual(body['reconciliation'], reference['reconciliation'])
+
+    def test_an_id_state_that_no_filed_row_shares_gives_way_to_the_filed_state(self):
+        body = self.flow(rows=(('k1', 'SMITH, ANN', 'YY', 2500.0), ('k2', 'ZEDDY, ZOE', 'ZZ', 1000.0)))
+        node = by_id(body)[self.NODE]
+        self.assertEqual((node['label'], node['state']), ('Ann Smith', 'YY'))       # the larger amount wins the tie
+        self.assertEqual(self.received(body), 3500.0)
+
+    def test_the_candidate_master_of_the_flows_cycle_is_read_first(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for folder, name, state in (('cn22', 'OLD, OLLIE', 'AA'), ('cn24', 'NEW, NORA', 'BB'), ('cn26', 'NEWEST, NED', 'CC')):
+                (Path(directory) / folder).mkdir()
+                (Path(directory) / folder / 'cn.txt').write_text(f'H4XX01001|{name}|REP|2024|{state}|H|01|I|C|C1|\n', encoding='ascii')
+            saved, flow_data.CANDIDATE_MASTER_ROOT = flow_data.CANDIDATE_MASTER_ROOT, directory
+            try:
+                for cycle, year in ((2022, '2022'), ('2024', '2024'), (2028, '2026'), (None, '2026')):
+                    self.assertEqual([item[0] for item in flow_data.candidate_master(cycle)][0], year, cycle)
+                self.assertEqual(flow_data.candidate_master(2024)[0][1]['H4XX01001'], ('NEW, NORA', 'BB'))
+            finally:
+                flow_data.CANDIDATE_MASTER_ROOT = saved
+
+    def test_name_words_ignore_case_accents_apostrophes_and_short_words(self):
+        words = flow_data.name_words("O'Brien, JOSÉ de la Cruz Jr")
+        self.assertTrue({'OBRIEN', 'JOSE', 'CRUZ'} <= words and not words & {'DE', 'LA', 'JR'}, words)
+        self.assertTrue(flow_data.name_words('VAN EPPS, MATT') & flow_data.name_words('VANEPPS, MATTHEW ROBERT'))
+        self.assertEqual(flow_data.name_words(None), set())
+
+
 if __name__ == '__main__':
     unittest.main()

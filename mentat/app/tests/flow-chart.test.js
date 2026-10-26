@@ -337,3 +337,53 @@ test('lanes G1/G1b: the tooltip takes the nearest spot 4 px clear of all text, n
   const noRibbon = chart.placeTip({x: 400, y: 260, width: 160, height: 50, room: 800, top: 4, bottom: 600, obstacles: []});
   assert.ok(noRibbon.top + 50 <= 260, `without it, above: ${JSON.stringify(noRibbon)}`);
 });
+
+/* ------------------------------------------- filings that name another candidate */
+const CROSS_NOTE = {kind: 'cross_candidate_filing', sub_id: '4120420241074527917', amount: 1000, date: '2024-10-16',
+  filer_committee_id: 'C00804179', filed_candidate_id: 'S2NE00094', filed_committee_id: 'C00498907',
+  named_recipient: 'ROSEN, JACKY', named_office_state: 'NV', named_recipient_committee: 'ROSEN FOR SENATE',
+  named_candidate_id: 'S8NV00156'};
+
+function crossFixture() {
+  const body = JSON.parse(JSON.stringify(FIXTURE));
+  const node = body.nodes.find(item => item.id === 'candidate:H4XX01001:contribution');
+  node.cross_candidate_filings = [CROSS_NOTE];
+  const link = body.links.find(item => item.target === node.id);
+  link.cross_candidate_filings = [CROSS_NOTE];
+  const result = layout.layout(body, {width: 1200, height: 560});
+  return {body, node, result, context: {result, format: {short: chart.short, full: chart.full}}};
+}
+
+test('a filing under an ID that names another candidate is a plain warning on the node and its ribbon, escaped as text', () => {
+  const {body, node, result, context} = crossFixture();
+  assert.equal(chart.personName('ROSEN, JACKY'), 'Jacky Rosen');
+  assert.equal(chart.personName('GALLEGO, RUBEN M. REP.'), 'Ruben Gallego');
+  const said = chart.describe({node: result.nodes.find(item => item.id === node.id)}, context, body);
+  assert.deepEqual(said.warnings, ['⚠ 1 filing under this ID names another candidate: Jacky Rosen (NV) S8NV00156, $1,000.00, 2024-10-16. '
+    + 'Money stays with Ann Smith as FEC filed it.']);
+  assert.ok(!said.lines.some(line => /another candidate/.test(line)), 'the warning is its own styled line, not one of the plain lines');
+  const ribbon = chart.describe({link: result.links.find(item => item.target === node.id && item.cross_candidate_filings)}, context, body);
+  assert.deepEqual(ribbon.warnings, ['⚠ 1 filing on this ribbon names another candidate ($1,000.00). Money stays here as FEC filed it.']);
+  const clean = chart.describe({node: layout.layout(FIXTURE, {width: 1200, height: 560}).nodes.find(item => item.id === node.id)},
+    {result: layout.layout(FIXTURE, {width: 1200, height: 560}), format: {short: chart.short, full: chart.full}}, FIXTURE);
+  assert.deepEqual(clean.warnings, []);
+});
+
+test('the flow-level notice states the count and the total, lists the filings, and is hidden when there are none', () => {
+  const make = tag => ({tag, children: [], className: '', textContent: '', hidden: false,
+    appendChild(child) { this.children.push(child); return child; },
+    replaceChildren() { this.children = []; }, get ownerDocument() { return doc; }});
+  const doc = {createElement: make};
+  const host = make('div');
+  const summary = {count: 1, amount: 1000, items: [Object.assign({node: 'candidate:S2NE00094:contribution', node_label: 'Deb Fischer'}, CROSS_NOTE)]};
+  assert.ok(chart.crossNotice(host, summary, {full: chart.full}));
+  assert.equal(host.hidden, false);
+  assert.equal(host.children[0].textContent, '⚠ 1 filing in this flow names a different candidate than the ID it was filed under, '
+    + '$1,000.00 in all. The money stays with the candidate FEC filed it under.');
+  assert.equal(host.children[1].children[0].textContent, 'Jacky Rosen (NV) S8NV00156, $1,000.00, 2024-10-16, filed under Deb Fischer');
+  chart.crossNotice(host, {count: 2, amount: 2500.5, items: []});
+  assert.match(host.children[0].textContent, /^⚠ 2 filings in this flow name a different candidate .*\$2,500\.50 in all/);
+  chart.crossNotice(host, undefined);
+  assert.equal(host.hidden, true);
+  assert.equal(host.children.length, 0);
+});

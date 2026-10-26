@@ -57,6 +57,7 @@
     <h3 id="evidence-flow-heading" class="flow-heading"></h3>
     <p id="evidence-flow-sub" class="flow-sub"></p>
     <div id="evidence-flow-reroot" class="flow-reroot" hidden></div>
+    <div id="evidence-flow-cross" class="flow-cross" role="note" hidden></div>
     <div id="evidence-flow-status" class="flow-status" role="status" hidden></div>
     <div id="evidence-flow-canvas" class="flow-canvas"></div>
     <div id="evidence-flow-foot" class="flow-foot"></div>
@@ -299,6 +300,8 @@
     $('evidence-flow-canvas').replaceChildren();
     $('evidence-flow-routes').replaceChildren();
     $('evidence-flow-foot').textContent = '';
+    $('evidence-flow-cross').replaceChildren();
+    $('evidence-flow-cross').hidden = true;
   }
 
   function heading(payload) {
@@ -372,6 +375,8 @@
     const chartApi = root.MentatFlowChart;
     // FL7: one footnote line, every note in full under Details.
     chartApi.footnote($('evidence-flow-foot'), payload.notes || []);
+    // Filings under one candidate's ID that name another: the count and the total, over the drawing.
+    chartApi.crossNotice($('evidence-flow-cross'), payload.cross_candidate_filings);
     // FL10: the heading on one line.
     chartApi.fitHeading($('evidence-flow-heading'));
     const canvas = $('evidence-flow-canvas');

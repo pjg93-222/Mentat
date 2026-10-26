@@ -411,6 +411,74 @@
       + (second ? `, ${percent(second.share)} from ${second.label}` : '') + ' · pooled, not traced dollars';
   }
 
+  /* ----------------------------------------------- filings that name another candidate */
+  // The money stays with the candidate ID FEC filed it under; a filing under one ID that names another candidate
+  // (Coinbase PAC's $1,000 under Deb Fischer's IDs naming Jacky Rosen) is a tracked note the reader sees plainly.
+  const NAME_SKIP = /^(MR|MRS|MS|MISS|DR|HON|REP|SEN|JR|SR|II|III|IV)$/i;
+  const titled = text => String(text || '').toLowerCase().replace(/(^|[^a-z])([a-z])/g, (all, lead, letter) => lead + letter.toUpperCase());
+  // 'ROSEN, JACKY' -> 'Jacky Rosen'; a name with no comma is only title-cased.
+  function personName(filed) {
+    const text = String(filed || '').replace(/\s+/g, ' ').trim();
+    if (!text.includes(',')) return titled(text);
+    const last = text.slice(0, text.indexOf(','));
+    const given = text.slice(text.indexOf(',') + 1).replace(/\./g, ' ').split(' ')
+      .find(word => word.replace(/[^A-Za-z]/g, '').length > 1 && !NAME_SKIP.test(word.replace(/[^A-Za-z]/g, '')));
+    return titled([given, last].filter(Boolean).join(' '));
+  }
+  function namedWords(note, full) {
+    const who = personName(note.named_recipient) + (note.named_office_state ? ` (${note.named_office_state})` : '')
+      + (note.named_candidate_id ? ` ${note.named_candidate_id}` : '');
+    return [who, note.amount == null ? '' : full(note.amount), note.date].filter(Boolean).join(', ');
+  }
+  const plural = (count, one, many) => (count === 1 ? one : many);
+  function nodeWarning(node, full) {
+    const notes = node.cross_candidate_filings || [];
+    if (!notes.length) return '';
+    const shown = notes.slice(0, 3).map(note => namedWords(note, full)).join('; ');
+    const more = notes.length > 3 ? `; and ${notes.length - 3} more` : '';
+    return `⚠ ${notes.length} ${plural(notes.length, 'filing under this ID names', 'filings under this ID name')} another candidate: `
+      + `${shown}${more}. Money stays with ${node.label} as FEC filed it.`;
+  }
+  function linkWarning(link, full) {
+    const notes = link.cross_candidate_filings || [];
+    if (!notes.length) return '';
+    const sum = notes.reduce((total, note) => total + (Number(note.amount) || 0), 0);
+    return `⚠ ${notes.length} ${plural(notes.length, 'filing', 'filings')} on this ribbon ${plural(notes.length, 'names', 'name')} another candidate `
+      + `(${full(sum)}). Money stays here as FEC filed it.`;
+  }
+
+  // The notice over a Flow whose filings name other candidates: the count and the total, then each filing.
+  // `summary` is the payload's cross_candidate_filings ({count, amount, items}); it is absent when there are none.
+  function crossNotice(host, summary, format) {
+    const doc = host.ownerDocument;
+    const money = (format && format.full) || module_full;
+    host.replaceChildren();
+    host.hidden = !(summary && summary.count > 0);
+    if (host.hidden) return null;
+    const count = summary.count, items = summary.items || [];
+    const line = doc.createElement('p');
+    line.className = 'flow-cross-line';
+    line.textContent = `⚠ ${count} ${plural(count, 'filing in this flow names', 'filings in this flow name')} a different candidate than the ID `
+      + `${plural(count, 'it was', 'they were')} filed under, ${money(summary.amount)} in all. The money stays with the candidate FEC filed it under.`;
+    host.appendChild(line);
+    if (items.length) {
+      const list = doc.createElement('ul');
+      list.className = 'flow-cross-list';
+      for (const item of items.slice(0, 5)) {
+        const row = doc.createElement('li');
+        row.textContent = `${namedWords(item, money)}, filed under ${item.node_label || item.filed_candidate_id}`;
+        list.appendChild(row);
+      }
+      if (items.length > 5) {
+        const row = doc.createElement('li');
+        row.textContent = `and ${items.length - 5} more`;
+        list.appendChild(row);
+      }
+      host.appendChild(list);
+    }
+    return line;
+  }
+
   function describe(target, context, payload, hints) {
     const {result} = context;
     const {short, full} = context.format || {short: module_short, full: module_full};
@@ -438,11 +506,13 @@
         + (link.rows ? ` · ${link.rows.toLocaleString('en-US')} ${rowWord}${link.rows === 1 ? '' : 's'}` : ''));
       for (const line of link.details || []) lines.push(line);
       if (link.date_unverified) lines.push('Undated in the filing: counted, date not verified');
+      const crossed = linkWarning(link, full);
       if (source.stub && source.carryover) lines.push(`Carried over: ${source.carryover}`);
       const record = (link.evidence || []).find(item => fec(item.source_url));
       const url = record ? fec(record.source_url) : fec(link.evidence_url || '');
       const follows = sink.stub === 'onward' && sink.committee_id && hints && hints.zoom;
-      return {title, lines, url, urlText: record ? 'FEC filing' : 'Committee on FEC', hint: follows ? 'Click to follow it onward' : ''};
+      return {title, lines, warnings: crossed ? [crossed] : [], url, urlText: record ? 'FEC filing' : 'Committee on FEC',
+        hint: follows ? 'Click to follow it onward' : ''};
     }
     const node = target.node;
     const lines = [full(node.value)];
@@ -472,8 +542,9 @@
       if (by.length) lines.push('Opened by ' + by.slice(0, 2).map(item => `${item.label} ${short(item.amount)}`
         + (item.first_date ? ` from ${item.first_date}` : '')).join(', ') + (by.length > 2 ? `, and ${by.length - 2} more` : ''));
     }
-    return {title: nodeTitle(node), lines, url: fec(node.fec_url || ''), urlText: node.kind === 'candidate' ? 'Candidate on FEC' : 'Committee on FEC',
-      hint: hintFor(node, hints)};
+    const crossed = nodeWarning(node, full);
+    return {title: nodeTitle(node), lines, warnings: crossed ? [crossed] : [], url: fec(node.fec_url || ''),
+      urlText: node.kind === 'candidate' ? 'Candidate on FEC' : 'Committee on FEC', hint: hintFor(node, hints)};
   }
 
   // The gestures a node answers to, in the words of the board: shown last in its tooltip.
@@ -1335,6 +1406,14 @@
         row.textContent = line;
         tip.appendChild(row);
       }
+      // A filing under this ID that names another candidate: plain, after the lines, before the links.
+      for (const line of text.warnings || []) {
+        const row = doc.createElement('span');
+        row.className = 'flow-warn';
+        row.setAttribute('role', 'note');
+        row.textContent = line;
+        tip.appendChild(row);
+      }
       // A candidate: how their campaign spent its money, a section of the tooltip (read lazily, one read per candidate).
       const candidate = target.node && spendingEnabled() && spendable(target.node, cycleOf()) ? target.node : null;
       if (candidate) {
@@ -1646,7 +1725,7 @@
   }
 
   const module_short = short, module_full = full;
-  const api = {svgString, mount, prepare, describe, short, full, footnote, fitHeading, fitLine, MODES, VIEW_OPACITY,
+  const api = {svgString, mount, prepare, describe, short, full, footnote, crossNotice, personName, fitHeading, fitLine, MODES, VIEW_OPACITY,
     // Lane G1 (board #44): what a hover lights, and where its tooltip goes.
     traced, placeTip,
     // Lane Z (2026-10-15): the zoom path, the strip and minimap, the chain behind a pin, one read per query.

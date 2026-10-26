@@ -101,6 +101,13 @@ body[data-view] #view-evidence.flow-open > .evidence-layout { display: none; }
 .flow-tooltip strong { font-weight: 600; }
 .flow-tooltip span:nth-of-type(2) { color: #327a7a; }
 .flow-tooltip a { color: var(--acu-purple); }
+.flow-tooltip span.flow-warn { margin-top: 3px; padding-left: 6px; border-left: 3px solid #eca91c; color: #7d4b00; font-weight: 600; }
+/* A filing under one candidate's ID that names another: the money stays where FEC filed it, and this says so. */
+.flow-cross { margin: 8px 0 0; padding: 7px 10px; border-left: 3px solid #eca91c; border-radius: 0 6px 6px 0; background: #fff7e3;
+  color: #5c3b00; font: 400 12px/1.4 var(--font-sans); }
+.flow-cross[hidden] { display: none; }
+.flow-cross-line { margin: 0; font-weight: 600; }
+.flow-cross-list { margin: 4px 0 0; padding-left: 18px; font-weight: 400; }
 
 /* Chart Studio's Flow mark (board #46): the Stages shelf, the Flow options, the legend. Lane
    F2a: the drawing's text is the board's 13px over the canvas's 18px (workspace-polish.css), and
