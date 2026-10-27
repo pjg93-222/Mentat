@@ -59,7 +59,7 @@ class ActivityDirectTests(unittest.TestCase):
         self.assertEqual({k: (r['amount'], r['direct']) for k, r in rows.items()},
                          {'S6RI00163': (153994, 0), 'H0CA00001': (810, 90)})
         # Nothing but the added field changed on a row.
-        self.assertEqual(set(rows['H0CA00001']), {'id', 'label', 'amount', 'party', 'direct'})
+        self.assertEqual(set(rows['H0CA00001']), {'id', 'label', 'amount', 'party', 'direct', 'party_source'})  # no cn master here: the filed party, flagged (D-343)
         self.assertEqual(rows['S6RI00163']['direct'], 0.0)
 
     def test_direct_is_the_direct_view_amount_for_the_same_filters(self):
