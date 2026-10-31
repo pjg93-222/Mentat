@@ -3922,6 +3922,11 @@ class Handler(access_gate.AccessMixin, BaseHTTPRequestHandler):
             if self.path == '/api/studio/views/delete':
                 return self.send(self.server.app.delete_view(data))
             return self.send({"error": "Not found."}, 404)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Analytical POSTs can be cancelled while their response is written.
+            # A disconnected client cannot receive a second error response.
+            self.close_connection = True
+            return
         except Conflict as error:
             return self.send({'error': str(error)}, 409)
         except RunNotFound as error:
