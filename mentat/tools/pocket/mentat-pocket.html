@@ -403,15 +403,15 @@ var DATA = /*__DATA_START__*/{}/*__DATA_END__*/;
   'use strict';
 
   /* ------------------------------------------------------------- storage */
-  var KEY = 'mentat-pocket-scope-v1';
+  var STORAGE_NAMESPACE = 'mentat-pocket-scope-v1';
   function readState(){
     try{
-      var raw = window.localStorage.getItem(KEY);
+      var raw = window.localStorage.getItem(STORAGE_NAMESPACE);
       return raw ? JSON.parse(raw) : null;
     }catch(error){ return null; }
   }
   function writeState(value){
-    try{ window.localStorage.setItem(KEY, JSON.stringify(value)); }catch(error){ /* private mode */ }
+    try{ window.localStorage.setItem(STORAGE_NAMESPACE, JSON.stringify(value)); }catch(error){ /* private mode */ }
   }
 
   /* --------------------------------------------------------- formatting */

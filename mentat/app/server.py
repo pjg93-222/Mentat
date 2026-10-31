@@ -3710,6 +3710,11 @@ class Handler(access_gate.AccessMixin, BaseHTTPRequestHandler):
                 return self.send(b'' if unchanged else content, 304 if unchanged else 200,
                                  content_type=mime, cache_control='private, no-cache', etag=etag)
             return self.send({"error": "Not found."}, 404)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Graph refreshes and idle prefetches can cancel a response in flight.
+            # The disconnected client cannot receive a second error response.
+            self.close_connection = True
+            return
         except (ValueError, OSError, KeyError, zipfile.BadZipFile) as error:
             return self.send({"error": self.error_text(error)}, 400)
 
@@ -3917,6 +3922,11 @@ class Handler(access_gate.AccessMixin, BaseHTTPRequestHandler):
             if self.path == '/api/studio/views/delete':
                 return self.send(self.server.app.delete_view(data))
             return self.send({"error": "Not found."}, 404)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Analytical POSTs can be cancelled while their response is written.
+            # A disconnected client cannot receive a second error response.
+            self.close_connection = True
+            return
         except Conflict as error:
             return self.send({'error': str(error)}, 409)
         except RunNotFound as error:

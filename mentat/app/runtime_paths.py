@@ -50,6 +50,15 @@ def console_root():
     return _root('MENTAT_CONSOLE_ROOT', default)
 
 
+def runtime_state_root():
+    """Mutable desktop bookkeeping, separate from installed code and signed inputs.
+
+    The desktop bootstrap sets this from its validated per-user state root before
+    native imports. Source/CLI consoles retain their existing local state path.
+    """
+    return _root('MENTAT_RUNTIME_STATE_ROOT', CODE_ROOT / 'state')
+
+
 def report_cache_root():
     return _root('MENTAT_REPORT_CACHE_ROOT', data_root() / '.cache' / 'industry-report')
 

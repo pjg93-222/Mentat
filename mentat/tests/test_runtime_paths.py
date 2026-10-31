@@ -33,6 +33,17 @@ class RuntimePathTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             self.assertEqual(paths.data_root(), APP.parent)
             self.assertEqual(paths.app_data_root(), APP/'data')
+            self.assertEqual(paths.runtime_state_root(), APP.parent/'state')
+
+    def test_explicit_runtime_state_is_absolute_and_independent_of_inputs(self):
+        selected = self.root/'per-user-state'
+        os.environ['MENTAT_RUNTIME_STATE_ROOT'] = str(selected)
+        self.assertEqual(paths.runtime_state_root(), selected)
+        self.assertFalse(selected.is_relative_to(self.data))
+        self.assertFalse(selected.is_relative_to(APP.parent))
+        os.environ['MENTAT_RUNTIME_STATE_ROOT'] = 'relative-state'
+        with self.assertRaisesRegex(ValueError, 'absolute'):
+            paths.runtime_state_root()
 
     def test_portable_roundtrip_and_integrity(self):
         for root, label in ((self.data,'data'), (self.console,'console')):
