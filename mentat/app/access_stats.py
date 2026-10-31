@@ -23,7 +23,8 @@ and small is worth most; stale, cheap and large goes first. F is stored as (freq
 count as of last_ts, so it is exact without keeping each access: merging (f1, t1) and (f2, t2) at
 T = max(t1, t2) gives f1 * exp(-lambda (T - t1)) + f2 * exp(-lambda (T - t2)).
 
-Storage. SQLite at state/prewarm/access.sqlite (PATH; configure() points a test or sandbox elsewhere),
+Storage. SQLite at state/prewarm/access.sqlite (under MENTAT_RUNTIME_STATE_ROOT in the desktop;
+PATH; configure() points a test or sandbox elsewhere),
 WAL journal, BUSY_TIMEOUT_SECONDS busy timeout, one connection per thread. Several processes share it:
 each flush merges inside one BEGIN IMMEDIATE transaction, so no access is lost to a concurrent writer.
 record() only updates an in-memory buffer; a daemon thread flushes it every FLUSH_SECONDS, sooner once
@@ -41,9 +42,10 @@ from pathlib import Path
 import sqlite3
 import threading
 import time
+import runtime_paths
 
 PROJECT = Path(__file__).resolve().parents[1]
-DEFAULT_PATH = PROJECT / 'state' / 'prewarm' / 'access.sqlite'
+DEFAULT_PATH = runtime_paths.runtime_state_root() / 'prewarm' / 'access.sqlite'
 PATH = DEFAULT_PATH
 HALF_LIFE_SECONDS = 7 * 24 * 3600
 DECAY = math.log(2) / HALF_LIFE_SECONDS
